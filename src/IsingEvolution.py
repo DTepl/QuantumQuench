@@ -38,4 +38,4 @@ class IsingEvol():
                      label=r'$\langle \sigma^X_{{{}}} \sigma^X_{{{}}} \rangle$'.format(obs_XX[i][0], obs_XX[i][1]))
         plt.xlabel('trotter steps')
         plt.legend()
-        plt.savefig('quench.png')
+        plt.savefig(f'../figs/quench_N{self.N}_J{self.J}_h{self.h}_dt{self.dt}.png')

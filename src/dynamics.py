@@ -6,8 +6,8 @@ import pennylane as qml
 from src.IsingEvolution import IsingEvol
 
 N = 16
-J = 1
-h = 0.3
+J = 0.8
+h = 1
 dt = 0.1  # time step
 obs_Z = [2, 15]
 obs_XX = [[1, 13], [5, 14]]

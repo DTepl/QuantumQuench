@@ -3,9 +3,10 @@ import numpy as np
 from src.IsingEvolution import IsingEvol
 import matplotlib.pyplot as plt
 import tqdm
+import pickle
 
 N_ = 20
-trotter_steps_ = 100
+trotter_steps_ = 10
 J_ = -0.25
 h_ = -1.5
 dt_ = 0.1  # time step
@@ -38,7 +39,21 @@ def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps):
     plt.plot(np.array(tau), np.array(kinks_mean))
     plt.xlabel('$\\tau_Q$')
     plt.ylabel('Kinks')
-    plt.savefig(f'../figs/kinks_N{N}_J{J}_h{h}_dt{dt}_steps{trotter_steps}.png')
+
+    filename = f'kinks_N{N}_J{J}_h{h}_dt{dt}_steps{trotter_steps}'
+    plt.savefig("../figs/" + filename + ".png")
+
+    things_to_save = [tau, kinks_mean, kinks_sig]
+    with open("../data/" + filename, "wb") as f:
+        pickle.dump(things_to_save, f)
+
+
+def load_file(filename):
+    with open(filename, "rb") as f:
+        things_to_load = pickle.load(f)
+
+    [tau, kinks_mean, kinks_sig] = things_to_load
+    return tau, kinks_mean, kinks_sig
 
 
 estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_)

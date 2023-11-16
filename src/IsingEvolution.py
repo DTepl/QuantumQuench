@@ -5,8 +5,10 @@ import logging as log
 from qiskit import QuantumCircuit, execute
 from qiskit.quantum_info.operators import SparsePauliOp
 from qiskit import Aer
+from itertools import product
+from scipy import sparse
 
-log.getLogger().setLevel(log.INFO)
+log.basicConfig(level=log.INFO, filename="output.log")
 backend = Aer.get_backend('aer_simulator')
 
 
@@ -17,6 +19,7 @@ class IsingEvol():
         self.dt = dt
         self.h = h
         self.J = J
+        self.progress = True
         self.linear_increase = True
         self.obs = {
             'Z': [],
@@ -31,6 +34,7 @@ class IsingEvol():
             'Z': [],
             'XX': []
         }
+        self.nok = (None, None)
 
     def observables(self, obs_Z, obs_XX):
         operators_Z = []
@@ -64,7 +68,7 @@ class IsingEvol():
         for idx in range(self.N):
             qc.h(idx)
 
-        for step in tqdm.tqdm(range(1, steps + 1)):
+        for step in tqdm.tqdm(range(1, steps + 1), disable=not self.progress):
             self.evolution_step(qc, step=step, proportion=(step / steps if linear_increase else 1))
         return qc
 
@@ -80,9 +84,23 @@ class IsingEvol():
 
     def compute_expectationvals(self):
         log.info(f"Computing expectation values of observables")
-        for step in tqdm.tqdm(range(1, len(self.states) + 1)):
+        for step in tqdm.tqdm(range(1, len(self.states) + 1), disable=not self.progress):
             self.expectations['Z'].append([self.states[str(step)].expectation_value(op).real for op in self.obs['Z']])
             self.expectations['XX'].append([self.states[str(step)].expectation_value(op).real for op in self.obs['XX']])
+
+    def compute_kink_density(self):
+        spins = [0, 1]
+        nok = []
+        for subset in product(spins, repeat=self.N):
+            arr = np.array(subset)
+            nok.append(np.sum(np.abs(arr[0:-1] - arr[1:])))
+
+        log.info(f"Computing expectation values for number of kinks")
+        exp_kinks = []
+        diag_matr = sparse.diags(nok)
+        for step in tqdm.tqdm(range(1, len(self.states) + 1), disable=not self.progress):
+            exp_kinks.append(np.real(np.conj(self.states[str(step)].data) @ diag_matr @ self.states[str(step)].data))
+        self.nok = (np.mean(exp_kinks), np.var(exp_kinks))
 
     def plot(self):
         log.info("Plotting observables...")

@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.IsingEvolution import IsingEvol
+from IsingEvolution import IsingEvol
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 import tqdm

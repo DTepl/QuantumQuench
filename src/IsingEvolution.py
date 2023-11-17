@@ -93,7 +93,7 @@ class IsingEvol():
         nok = []
         for subset in product(spins, repeat=self.N):
             arr = np.array(subset)
-            nok.append(np.sum(np.abs(arr[0:-1] - arr[1:])))
+            nok.append(np.sum(np.abs(arr[0:-1] - arr[1:])) / self.N)
 
         log.info(f"Computing expectation values for number of kinks")
         exp_kinks = []

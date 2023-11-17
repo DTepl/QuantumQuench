@@ -68,19 +68,20 @@ def load_file(filename):
     return tau, kdens_mean, kdens_sig
 
 
-N_ = 20
+N_ = 24
 trotter_steps_ = 100
 J_ = -0.25
 h_ = -0.2
 dt_ = 0.1  # time step
 obs_Z_ = [5, 6]
 obs_XX_ = [[4, 14], [5, 6]]
-data_start = 40
+data_start = 0
 
-# estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_)
+estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_)
 # plot_dependency("../figs/kinks_N20_J-0.25_h-1.5_dt0.1_steps100", tau, kinks_mean, kinks_sig)
 
-tau, kinks_mean, kinks_sig = np.array(load_file("../data/kinks_N20_J-0.25_h-0.2_dt0.1_steps100"))
-popt, pcov = fit_kinks(tau[data_start:], kinks_mean[data_start:], kinks_sig[data_start:] + 1e-15)
-plot_dependency("../figs/kinks_N20_J-0.25_h-0.2_dt0.1_steps100", tau, kinks_mean, kinks_sig, plot_fit=True, a=popt[0],
-                e=popt[1], c=popt[2])
+# filename = "kinks_N20_J-0.25_h-0.2_dt0.1_steps100"
+# tau, kinks_mean, kinks_sig = np.array(load_file("../data/" + filename))
+# popt, pcov = fit_kinks(tau[data_start:], kinks_mean[data_start:], kinks_sig[data_start:] + 1e-15)
+# plot_dependency("../figs/" + filename, tau, kinks_mean, kinks_sig, plot_fit=True, a=popt[0],
+#                 e=popt[1], c=popt[2])

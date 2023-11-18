@@ -1,3 +1,4 @@
+import argparse
 from itertools import repeat
 
 import numpy as np
@@ -20,7 +21,7 @@ def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, linear_increase=Tru
     ising_model_evolution.plot(expectations)
 
 
-def ising_model_evolution(ising_model_evolution, steps):
+def iteration_kinks(ising_model_evolution, steps):
     states = ising_model_evolution.execute(draw=False, steps=steps)
     nok_mean, nok_sig = ising_model_evolution.compute_kink_density(states)
     return [nok_mean, nok_sig]
@@ -33,7 +34,7 @@ def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps):
     tau = dt * np.array(steps)
 
     with Pool() as pool:
-        nok = np.array(list(pool.starmap(ising_model_evolution, zip(repeat(ising_model_evolution), steps))))
+        nok = np.array(list(pool.starmap(iteration_kinks, zip(repeat(ising_model_evolution), steps))))
 
     kdens_mean = nok[:, 0]
     kdens_sig = nok[:, 1]
@@ -78,17 +79,38 @@ def load_file(filename):
 
 
 if __name__ == '__main__':
-    N_ = 20
-    trotter_steps_ = 100
-    J_ = -0.25
-    h_ = -0.2
-    dt_ = 0.1  # time step
+    parser = argparse.ArgumentParser("QuantumQuench")
+    parser.add_argument("N", help="Number of Qubits", type=int)
+    parser.add_argument("trotter_steps", help="The number of trotter steps", type=int)
+
+    parser.add_argument("-dt", help="Duration of a trotter imestep", default=0.1, type=int)
+    parser.add_argument("-Jv", "--J_values", help="Coupling strength J ", type=int, default=-0.25)
+    parser.add_argument("-hv", "--h_values",
+                        help="Coupling strength with external magnetic field. If linear increase is true, this will be the maximum h value",
+                        type=int, default=-0.2)
+    parser.add_argument("-li", "--linear_increase", help="If magnetic field increases linearly", type=bool,
+                        default=True)
+
+    parser.add_argument("-m", "--mode",
+                        help="0 for kink density estimation and 1 for plain evolution of a given system", type=int,
+                        default=0)
+
+    args = parser.parse_args()
+
+    N_ = args.N
+    trotter_steps_ = args.trotter_steps
+    J_ = args.J_values
+    h_ = args.h_values
+    dt_ = args.dt  # time step
     obs_Z_ = [5, 6]
     obs_XX_ = [[4, 14], [5, 6]]
     data_start = 0
 
-    estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_)
-    # evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_,obs_XX_)
+    if not args.mode:
+        estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_)
+    else:
+        evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_)
+
     # plot_dependency("../figs/kinks_N20_J-0.25_h-1.5_dt0.1_steps100", tau, kinks_mean, kinks_sig)
 
     # filename = "kinks_N20_J-0.25_h-0.2_dt0.1_steps100"

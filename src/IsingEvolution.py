@@ -6,7 +6,6 @@ from qiskit import QuantumCircuit, execute
 from qiskit.quantum_info.operators import SparsePauliOp
 from qiskit import Aer
 from itertools import product
-from scipy import sparse
 
 log.basicConfig(level=log.INFO, filename="output.log")
 backend = Aer.get_backend('aer_simulator')
@@ -29,12 +28,6 @@ class IsingEvol():
             'Z': [],
             'XX': []
         }
-        self.states = {}
-        self.expectations = {
-            'Z': [],
-            'XX': []
-        }
-        self.nok = (None, None)
 
     def observables(self, obs_Z, obs_XX):
         operators_Z = []
@@ -80,15 +73,22 @@ class IsingEvol():
         job = execute(qc, backend)
         res = job.result()
         log.info(f"Time taken for execution: {res.time_taken}")
-        self.states = res.data(0)
+        return res.data(0)
 
-    def compute_expectationvals(self):
+    def compute_expectationvals(self, states):
         log.info(f"Computing expectation values of observables")
-        for step in tqdm.tqdm(range(1, len(self.states) + 1), disable=not self.progress):
-            self.expectations['Z'].append([self.states[str(step)].expectation_value(op).real for op in self.obs['Z']])
-            self.expectations['XX'].append([self.states[str(step)].expectation_value(op).real for op in self.obs['XX']])
+        expectations = {
+            'Z': [],
+            'XX': []
+        }
 
-    def compute_kink_density(self):
+        for step in tqdm.tqdm(range(1, len(states) + 1), disable=not self.progress):
+            expectations['Z'].append([states[str(step)].expectation_value(op).real for op in self.obs['Z']])
+            expectations['XX'].append([states[str(step)].expectation_value(op).real for op in self.obs['XX']])
+
+        return expectations
+
+    def compute_kink_density(self, states):
         spins = [0, 1]
         nok = []
         for subset in product(spins, repeat=self.N):
@@ -97,15 +97,16 @@ class IsingEvol():
 
         log.info(f"Computing expectation values for number of kinks")
         exp_kinks = []
-        diag_matr = sparse.diags(nok)
-        for step in tqdm.tqdm(range(1, len(self.states) + 1), disable=not self.progress):
-            exp_kinks.append(np.real(np.conj(self.states[str(step)].data) @ diag_matr @ self.states[str(step)].data))
-        self.nok = (np.mean(exp_kinks), np.var(exp_kinks))
+        diag_matr = np.array(nok)
+        for step in tqdm.tqdm(range(1, len(states) + 1), disable=not self.progress):
+            exp_kinks.append(
+                np.real(np.dot(np.conj(states[str(step)].data), diag_matr * states[str(step)].data)))
+        return np.mean(exp_kinks), np.var(exp_kinks)
 
-    def plot(self):
+    def plot(self, expectations):
         log.info("Plotting observables...")
-        expZ = np.array(self.expectations['Z'])
-        expXX = np.array(self.expectations['XX'])
+        expZ = np.array(expectations['Z'])
+        expXX = np.array(expectations['XX'])
 
         for i in range(len(self.obs_idx['Z'])):
             plt.plot(expZ[:, i], label=r'$\langle \sigma^z_{{{}}} \rangle $'.format(self.obs_idx['Z'][i]))

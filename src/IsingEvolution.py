@@ -8,12 +8,12 @@ from qiskit import Aer
 from itertools import product
 
 log.basicConfig(level=log.INFO, filename="output.log")
-backend = Aer.get_backend('aer_simulator')
+backend = Aer.get_backend('aer_simulator_statevector')
 
 
 class IsingEvol():
 
-    def __init__(self, N, dt, h, J):
+    def __init__(self, N, dt, h, J, gpu=False):
         self.N = N
         self.dt = dt
         self.h = h
@@ -28,6 +28,9 @@ class IsingEvol():
             'Z': [],
             'XX': []
         }
+
+        if gpu:
+            backend.set_options(device='GPU')
 
     def observables(self, obs_Z, obs_XX):
         operators_Z = []

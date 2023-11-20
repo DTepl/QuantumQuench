@@ -10,9 +10,9 @@ from scipy.optimize import curve_fit
 import pickle
 
 
-def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, linear_increase=True):
+def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, gpu=False, linear_increase=True):
     # Initialization
-    ising_model_evolution = IsingEvol(N, dt, h, J)
+    ising_model_evolution = IsingEvol(N, dt, h, J, gpu)
     ising_model_evolution.observables(obs_Z, obs_XX)
 
     # Execution
@@ -27,8 +27,8 @@ def iteration_kinks(ising_model_evolution, steps):
     return [nok_mean, nok_sig]
 
 
-def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps):
-    ising_model_evolution = IsingEvol(N, dt, h, J)
+def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False):
+    ising_model_evolution = IsingEvol(N, dt, h, J, gpu)
     ising_model_evolution.progress = False
     steps = range(1, trotter_steps + 1)
     tau = dt * np.array(steps)
@@ -83,17 +83,18 @@ if __name__ == '__main__':
     parser.add_argument("N", help="Number of Qubits", type=int)
     parser.add_argument("trotter_steps", help="The number of trotter steps", type=int)
 
-    parser.add_argument("-dt", help="Duration of a trotter imestep", default=0.1, type=int)
-    parser.add_argument("-Jv", "--J_values", help="Coupling strength J ", type=int, default=-0.25)
+    parser.add_argument("-dt", help="Duration of a trotter imestep", default=0.1, type=float)
+    parser.add_argument("-Jv", "--J_values", help="Coupling strength J ", type=float, default=-0.25)
     parser.add_argument("-hv", "--h_values",
                         help="Coupling strength with external magnetic field. If linear increase is true, this will be the maximum h value",
-                        type=int, default=-0.2)
+                        type=float, default=-0.2)
     parser.add_argument("-li", "--linear_increase", help="If magnetic field increases linearly", type=bool,
                         default=True)
 
     parser.add_argument("-m", "--mode",
                         help="0 for kink density estimation and 1 for plain evolution of a given system", type=int,
                         default=0)
+    parser.add_argument("-gpu", "--gpu", help="1 to use GPU, else CPU", type=int, default=0)
 
     args = parser.parse_args()
 
@@ -107,9 +108,9 @@ if __name__ == '__main__':
     data_start = 0
 
     if not args.mode:
-        estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_)
+        estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_, bool(args.gpu))
     else:
-        evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_)
+        evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_, bool(args.gpu))
 
     # plot_dependency("../figs/kinks_N20_J-0.25_h-1.5_dt0.1_steps100", tau, kinks_mean, kinks_sig)
 

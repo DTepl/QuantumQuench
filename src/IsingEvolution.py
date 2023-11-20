@@ -4,7 +4,7 @@ import numpy as np
 import logging as log
 from qiskit import QuantumCircuit, execute
 from qiskit.quantum_info.operators import SparsePauliOp
-from qiskit import Aer
+from qiskit_aer import Aer
 from itertools import product
 
 log.basicConfig(level=log.INFO, filename="output.log")

@@ -29,6 +29,12 @@ class IsingEvol():
             'XX': []
         }
 
+        self.nok = []
+        for subset in product([0, 1], repeat=self.N):
+            arr = np.array(subset)
+            self.nok.append(np.sum(np.abs(arr[0:-1] - arr[1:])) / self.N)
+        self.nok = np.array(self.nok)
+
         if gpu:
             backend.set_options(device='GPU')
 
@@ -92,18 +98,12 @@ class IsingEvol():
         return expectations
 
     def compute_kink_density(self, states):
-        spins = [0, 1]
-        nok = []
-        for subset in product(spins, repeat=self.N):
-            arr = np.array(subset)
-            nok.append(np.sum(np.abs(arr[0:-1] - arr[1:])) / self.N)
-
-        log.info(f"Computing expectation values for number of kinks")
+        log.info(f"Computing expectation values for number of kinks ({len(states)} states)")
         exp_kinks = []
-        diag_matr = np.array(nok)
         for step in tqdm.tqdm(range(1, len(states) + 1), disable=not self.progress):
             exp_kinks.append(
-                np.real(np.dot(np.conj(states[str(step)].data), diag_matr * states[str(step)].data)))
+                np.real(np.dot(np.conj(states[str(step)].data), self.nok * states[str(step)].data)))
+        log.info(f"Finished computing expectation values for number of kinks ({len(states)} states)")
         return np.mean(exp_kinks), np.var(exp_kinks)
 
     def plot(self, expectations):

@@ -1,13 +1,12 @@
 import argparse
-import logging as log
 from itertools import repeat
+
 import numpy as np
-from IsingEvolution import IsingEvol, backend
+
+from IsingEvolution import IsingEvol
 from multiprocessing import Pool
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
-import jax.numpy as jnp
-import jax
 import pickle
 
 
@@ -28,38 +27,17 @@ def iteration_kinks(ising_model_evolution, steps):
     return [nok_mean, nok_sig]
 
 
-def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, run_mpi=False, gpu=False):
+def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False):
     ising_model_evolution = IsingEvol(N, dt, h, J, gpu)
     ising_model_evolution.progress = False
     steps = range(1, trotter_steps + 1)
     tau = dt * np.array(steps)
 
-    if run_mpi:
-        circuits = [ising_model_evolution.circuit(step) for step in steps]
-        job = backend.run(circuits, shots=0)
+    with Pool() as pool:
+        nok = np.array(list(pool.starmap(iteration_kinks, zip(repeat(ising_model_evolution), steps))))
 
-        jv_nok = jax.jit(
-            jax.vmap(lambda state: jnp.real(jnp.dot(jnp.conj(state), jnp.array(ising_model_evolution.nok) * state))))
-
-        kdens_mean = []
-        kdens_sig = []
-        for i in range(trotter_steps):
-            states_dict = job.result().data(i)
-            states = jnp.array([states_dict[str(y)].data for y in range(1, len(states_dict) + 1)])
-            noks = jv_nok(states)
-            kdens_mean.append(jnp.mean(noks))
-            kdens_sig.append(jnp.mean(noks))
-        kdens_mean = np.array(kdens_mean)
-        kdens_sig = np.array(kdens_sig)
-
-    else:
-        log.info(f"Starting parallel execution")
-        with Pool() as pool:
-            nok = np.array(list(pool.starmap(iteration_kinks, zip(repeat(ising_model_evolution), steps))))
-
-        kdens_mean = nok[:, 0]
-        kdens_sig = nok[:, 1]
-        log.info("Parallel execution finished")
+    kdens_mean = nok[:, 0]
+    kdens_sig = nok[:, 1]
 
     filename = f'kinks_N{N}_J{J}_h{h}_dt{dt}_steps{trotter_steps}'
     plot_dependency(filename, np.array(tau), np.array(kdens_mean), np.array(kdens_sig))
@@ -117,7 +95,6 @@ if __name__ == '__main__':
                         help="0 for kink density estimation and 1 for plain evolution of a given system", type=int,
                         default=0)
     parser.add_argument("-gpu", "--gpu", help="1 to use GPU, else CPU", type=int, default=0)
-    parser.add_argument("-mpi", "--mpi", help="1 to use MPI, else not", type=int, default=0)
 
     args = parser.parse_args()
 
@@ -131,9 +108,9 @@ if __name__ == '__main__':
     data_start = 0
 
     if not args.mode:
-        estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_, run_mpi=bool(args.mpi), gpu=bool(args.gpu))
+        estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_, bool(args.gpu))
     else:
-        evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_, gpu=bool(args.gpu))
+        evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_, bool(args.gpu))
 
     # plot_dependency("../figs/kinks_N20_J-0.25_h-1.5_dt0.1_steps100", tau, kinks_mean, kinks_sig)
 

@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import tqdm
 import numpy as np
 import logging as log
-from qiskit import QuantumCircuit, execute
+from qiskit import QuantumCircuit
 from qiskit.quantum_info.operators import SparsePauliOp
 from qiskit_aer import Aer
 from itertools import product
@@ -73,7 +73,7 @@ class IsingEvol():
         if draw:
             print(qc)
 
-        job = execute(qc, backend)
+        job = backend.run(qc)
         res = job.result()
         log.info(f"Time taken for execution: {res.time_taken}")
         return res.data(0)

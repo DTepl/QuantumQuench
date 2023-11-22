@@ -55,27 +55,31 @@ class IsingEvol():
         self.obs_idx['Z'] = obs_Z
         self.obs_idx['XX'] = obs_XX
 
-    def evolution_step(self, qc, step=1, proportion=1.0):
+    def evolution_step(self, qc, step=1, proportion=1.0, sample_step=1):
         for idx in range(self.N):
             qc.rz(2 * self.h * self.dt * proportion, idx)
 
         for idx in range(self.N - 1):
             qc.rxx(2 * self.J * self.dt, idx, idx + 1)
-        qc.save_statevector(label=str(step))
 
-    def circuit(self, steps, linear_increase=True):
+        if step % sample_step == 0:
+            qc.save_statevector(label=str(int(step / sample_step)))
+
+    def circuit(self, steps, linear_increase=True, samples=1):
         log.info(f"Building circuit for {steps} steps")
+        sample_step = max(np.floor(steps / samples), 1)
         self.linear_increase = linear_increase
         qc = QuantumCircuit(self.N)
         for idx in range(self.N):
             qc.h(idx)
 
         for step in tqdm.tqdm(range(1, steps + 1), disable=not self.progress):
-            self.evolution_step(qc, step=step, proportion=(step / steps if linear_increase else 1))
+            self.evolution_step(qc, step=step, proportion=(step / steps if linear_increase else 1),
+                                sample_step=sample_step)
         return qc
 
-    def execute(self, steps=1, linear_increase=True, draw=False):
-        qc = self.circuit(steps, linear_increase=linear_increase)
+    def execute(self, steps=1, linear_increase=True, draw=False, samples=1):
+        qc = self.circuit(steps, linear_increase=linear_increase, samples=samples)
         if draw:
             print(qc)
 

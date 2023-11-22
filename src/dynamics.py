@@ -10,31 +10,32 @@ from scipy.optimize import curve_fit
 import pickle
 
 
-def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, gpu=False, linear_increase=True):
+def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, gpu=False, linear_increase=True, samples=1):
     # Initialization
-    ising_model_evolution = IsingEvol(N, dt, h, J, gpu)
+    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu)
     ising_model_evolution.observables(obs_Z, obs_XX)
 
     # Execution
-    states = ising_model_evolution.execute(draw=False, steps=trotter_steps, linear_increase=linear_increase)
+    states = ising_model_evolution.execute(draw=False, steps=trotter_steps, linear_increase=linear_increase,
+                                           samples=samples)
     expectations = ising_model_evolution.compute_expectationvals(states)
     ising_model_evolution.plot(expectations)
 
 
-def iteration_kinks(ising_model_evolution, steps):
-    states = ising_model_evolution.execute(draw=False, steps=steps)
+def iteration_kinks(ising_model_evolution, steps, samples):
+    states = ising_model_evolution.execute(draw=False, steps=steps, samples=samples)
     nok_mean, nok_sig = ising_model_evolution.compute_kink_density(states)
     return [nok_mean, nok_sig]
 
 
-def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False):
-    ising_model_evolution = IsingEvol(N, dt, h, J, gpu)
+def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples=1):
+    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu)
     ising_model_evolution.progress = False
     steps = range(1, trotter_steps + 1)
     tau = dt * np.array(steps)
 
     with Pool() as pool:
-        nok = np.array(list(pool.starmap(iteration_kinks, zip(repeat(ising_model_evolution), steps))))
+        nok = np.array(pool.starmap(iteration_kinks, zip(repeat(ising_model_evolution), steps, repeat(samples))))
 
     kdens_mean = nok[:, 0]
     kdens_sig = nok[:, 1]
@@ -95,6 +96,8 @@ if __name__ == '__main__':
                         help="0 for kink density estimation and 1 for plain evolution of a given system", type=int,
                         default=0)
     parser.add_argument("-gpu", "--gpu", help="1 to use GPU, else CPU", type=int, default=0)
+    parser.add_argument("-s", "--samples", help="Number of samples to get from a run", type=int,
+                        default=1)
 
     args = parser.parse_args()
 
@@ -106,11 +109,13 @@ if __name__ == '__main__':
     obs_Z_ = [5, 6]
     obs_XX_ = [[4, 14], [5, 6]]
     data_start = 0
+    gpu_usage = bool(args.gpu)
+    samples_ = args.samples
 
     if not args.mode:
-        estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_, bool(args.gpu))
+        estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_, gpu=bool(args.gpu), samples=samples_)
     else:
-        evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_, bool(args.gpu))
+        evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_, gpu=bool(args.gpu), samples=samples_)
 
     # plot_dependency("../figs/kinks_N20_J-0.25_h-1.5_dt0.1_steps100", tau, kinks_mean, kinks_sig)
 

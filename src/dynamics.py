@@ -51,7 +51,10 @@ def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples
 def plot_dependency(filename, tau, kdens_mean, kdens_sig, plot_fit=False, a=0, e=0, c=0):
     plt.plot(tau, kdens_mean)
     if plot_fit:
-        plt.plot(tau, kink_density_theory(tau, a, e, c), label=f"a={round(a, 2)}, e={round(e, 2)}, c={round(c, 2)}")
+        plt.plot(tau, kink_density_theory(tau, a, e, c),
+                 label=f"$f(\\tau)={round(a, 2)} \\cdot \\tau ** ({round(e, 2)}) + {round(c, 2)}$")
+
+        plt.plot(tau, kink_density_theory(tau, 1 / (2 * np.pi * np.sqrt(2)), -0.5, 0), label="Theory", linestyle="--")
 
     plt.fill_between(tau, kdens_mean - kdens_sig, kdens_mean + kdens_sig, alpha=0.2)
     plt.xlabel('$\\tau_Q$')
@@ -68,7 +71,7 @@ def kink_density_theory(tau, a, e, c):
 
 
 def fit_kinks(tau, kinks, kinks_sigma):
-    return curve_fit(kink_density_theory, tau, kinks, sigma=kinks_sigma)
+    return curve_fit(kink_density_theory, tau, kinks, sigma=kinks_sigma, maxfev=5000)
 
 
 def load_file(filename):
@@ -111,15 +114,16 @@ if __name__ == '__main__':
     data_start = 0
     gpu_usage = bool(args.gpu)
     samples_ = args.samples
+    mode = bool(args.mode)
 
-    if not args.mode:
+    if not mode:
         estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_, gpu=bool(args.gpu), samples=samples_)
-    else:
+    elif mode:
         evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_, gpu=bool(args.gpu), samples=samples_)
 
     # plot_dependency("../figs/kinks_N20_J-0.25_h-1.5_dt0.1_steps100", tau, kinks_mean, kinks_sig)
 
-    # filename = "kinks_N20_J-0.25_h-0.2_dt0.1_steps100"
+    # filename = "kinks_N20_J-1.0_h-2.0_dt0.1_steps100"
     # tau, kinks_mean, kinks_sig = np.array(load_file("../data/" + filename))
     # popt, pcov = fit_kinks(tau[data_start:], kinks_mean[data_start:], kinks_sig[data_start:] + 1e-15)
     # plot_dependency("../figs/" + filename, tau, kinks_mean, kinks_sig, plot_fit=True, a=popt[0],

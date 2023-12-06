@@ -13,11 +13,12 @@ backend = Aer.get_backend('aer_simulator_statevector')
 
 class IsingEvol():
 
-    def __init__(self, N, dt, h, J, gpu=False):
+    def __init__(self, N, dt, h, J, gpu=False, periodic=False):
         self.N = N
         self.dt = dt
         self.h = h
         self.J = J
+        self.periodic = periodic
         self.progress = True
         self.linear_increase = True
         self.obs = {
@@ -55,31 +56,43 @@ class IsingEvol():
         self.obs_idx['Z'] = obs_Z
         self.obs_idx['XX'] = obs_XX
 
-    def evolution_step(self, qc, step=1, proportion=1.0, sample_step=1):
+    # Second order trotter formula
+    def evolution_step(self, qc, step=1, proportion=1.0, sample_step=1, h=None):
         for idx in range(self.N):
-            qc.rz(2 * self.h * self.dt * proportion, idx)
+            qc.rz((h or self.h) * self.dt * proportion, idx)
 
         for idx in range(self.N - 1):
             qc.rxx(2 * self.J * self.dt, idx, idx + 1)
 
+        if self.periodic:
+            qc.rxx(2 * self.J * self.dt, self.N - 1, 0)
+
+        for idx in range(self.N):
+            qc.rz((h or self.h) * self.dt * proportion, idx)
+
         if step % sample_step == 0:
             qc.save_statevector(label=str(int(step / sample_step)))
 
-    def circuit(self, steps, linear_increase=True, samples=1):
+    def circuit(self, steps, linear_increase=True, samples=1, h=None):
         log.info(f"Building circuit for {steps} steps")
         sample_step = max(np.floor(steps / samples), 1)
         self.linear_increase = linear_increase
         qc = QuantumCircuit(self.N)
+
+        qc.h(0)
+        for idx in range(self.N - 1):
+            qc.cnot(0, idx + 1)
+
         for idx in range(self.N):
             qc.h(idx)
 
         for step in tqdm.tqdm(range(1, steps + 1), disable=not self.progress):
             self.evolution_step(qc, step=step, proportion=(step / steps if linear_increase else 1),
-                                sample_step=sample_step)
+                                sample_step=sample_step, h=h)
         return qc
 
-    def execute(self, steps=1, linear_increase=True, draw=False, samples=1):
-        qc = self.circuit(steps, linear_increase=linear_increase, samples=samples)
+    def execute(self, steps=1, linear_increase=True, draw=False, samples=1, h=None):
+        qc = self.circuit(steps, linear_increase=linear_increase, samples=samples, h=h)
         if draw:
             print(qc)
 
@@ -101,14 +114,18 @@ class IsingEvol():
 
         return expectations
 
-    def compute_kink_density(self, states):
+    def compute_kink_density(self, states, raw=False):
         log.info(f"Computing expectation values for number of kinks ({len(states)} states)")
         exp_kinks = []
         for step in tqdm.tqdm(range(1, len(states) + 1), disable=not self.progress):
             exp_kinks.append(
                 np.real(np.dot(np.conj(states[str(step)].data), self.nok * states[str(step)].data)))
         log.info(f"Finished computing expectation values for number of kinks ({len(states)} states)")
-        return np.mean(exp_kinks), np.var(exp_kinks)
+
+        if raw:
+            return exp_kinks
+        else:
+            return np.mean(exp_kinks), np.var(exp_kinks)
 
     def plot(self, expectations):
         log.info("Plotting observables...")
@@ -124,4 +141,5 @@ class IsingEvol():
                                                                                        self.obs_idx['XX'][i][1]))
         plt.xlabel('trotter steps')
         plt.legend()
-        plt.savefig(f'../figs/quench_N{self.N}_lin{self.linear_increase}_J{self.J}_h{self.h}_dt{self.dt}.png')
+        plt.savefig(
+            f'../figs/quench_N{self.N}_lin{self.linear_increase}_J{self.J}_h{self.h}_dt{self.dt}_periodic{self.periodic}.png')

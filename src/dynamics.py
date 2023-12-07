@@ -10,9 +10,9 @@ from scipy.optimize import curve_fit
 import pickle
 
 
-def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, gpu=False, linear_increase=True, samples=1):
+def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, gpu=False, linear_increase=True, samples=1, inverse=False):
     # Initialization
-    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu)
+    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, inverse=inverse)
     ising_model_evolution.observables(obs_Z, obs_XX)
 
     # Execution
@@ -28,8 +28,8 @@ def iteration_kinks(ising_model_evolution, steps, samples, h=None):
     return [nok_mean, nok_sig]
 
 
-def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples=1, periodic=False):
-    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, periodic=periodic)
+def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples=1, periodic=False, inverse=False):
+    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, periodic=periodic, inverse=inverse)
     ising_model_evolution.progress = False
     steps = range(1, trotter_steps + 1)
     tau = dt * np.array(steps)
@@ -49,9 +49,9 @@ def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples
         pickle.dump(things_to_save, f)
 
 
-def estimate_kinks_magnetic_dependency(N, dt, h, J, trotter_steps, gpu=False, samples=1, periodic=False):
+def estimate_kinks_magnetic_dependency(N, dt, h, J, trotter_steps, gpu=False, samples=1, periodic=False, inverse=False):
     h_array = np.linspace(0, h, trotter_steps)
-    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, periodic=periodic)
+    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, periodic=periodic, inverse=inverse)
     ising_model_evolution.progress = False
 
     iteration_kinks(ising_model_evolution, 100, 1, 0)
@@ -89,8 +89,8 @@ def plot_dependency(filename, tau, kdens_mean, kdens_sig, plot_fit=False, a=0, e
     plt.fill_between(tau, kdens_mean - kdens_sig, kdens_mean + kdens_sig, alpha=0.2)
     plt.xlabel(xlabel or '$\\tau_Q$')
     plt.ylabel('Kink density')
-    # plt.yscale("log")
-    # plt.xscale("log")
+    plt.yscale("log")
+    plt.xscale("log")
     plt.legend()
     plt.tight_layout()
     plt.savefig("../figs/" + filename + ".png")
@@ -134,6 +134,8 @@ if __name__ == '__main__':
                         default=1)
     parser.add_argument("-p", "--periodic", help="1 for Periodic boundary conditions else Open", type=int,
                         default=0)
+    parser.add_argument("-inv", "--inverse", help="1 for inverse magnetic field ramp h_0 -> 0 else 0 -> h_0", type=int,
+                        default=0)
 
     args = parser.parse_args()
 
@@ -149,10 +151,11 @@ if __name__ == '__main__':
     samples_ = args.samples
     mode = args.mode
     periodic = bool(args.periodic)
+    inverse = bool(args.inverse)
 
     if mode == 0:
         estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_, gpu=bool(args.gpu), samples=samples_,
-                                      periodic=periodic)
+                                      periodic=periodic, inverse=inverse)
 
         filename = f"kinks_N{N_}_J{J_}_h{h_}_dt{dt_}_steps{trotter_steps_}_periodic{periodic}"
         tau, kinks_mean, kinks_sig = np.array(load_file("../data/" + filename))
@@ -160,9 +163,9 @@ if __name__ == '__main__':
         plot_dependency("../figs/" + filename, tau, kinks_mean, kinks_sig, plot_fit=True, a=popt[0], e=popt[1])
     elif mode == 1:
         evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_, gpu=bool(args.gpu), samples=samples_,
-                      periodic=periodic)
+                      periodic=periodic, inverse=inverse)
     elif mode == 2:
         estimate_kinks_magnetic_dependency(N_, dt_, h_, J_, trotter_steps_, gpu=bool(args.gpu), samples=samples_,
-                                           periodic=periodic)
+                                           periodic=periodic, inverse=inverse)
 
     # plot_dependency("../figs/kinks_N20_J-0.25_h-1.5_dt0.1_steps100", tau, kinks_mean, kinks_sig)

@@ -7,18 +7,23 @@ from qiskit.quantum_info.operators import SparsePauliOp
 from qiskit_aer import Aer
 from itertools import product
 
+from qiskit_nature.second_q.hamiltonians.lattices import LineLattice, BoundaryCondition
+from qiskit_nature.second_q.hamiltonians import HeisenbergModel
+from scipy.sparse.linalg import eigsh
+
 log.basicConfig(level=log.INFO, filename="output.log")
 backend = Aer.get_backend('aer_simulator_statevector')
 
 
 class IsingEvol():
 
-    def __init__(self, N, dt, h, J, gpu=False, periodic=False):
+    def __init__(self, N, dt, h, J, gpu=False, periodic=False, inverse=False):
         self.N = N
         self.dt = dt
         self.h = h
         self.J = J
         self.periodic = periodic
+        self.inverse = inverse
         self.progress = True
         self.linear_increase = True
         self.obs = {
@@ -30,6 +35,9 @@ class IsingEvol():
             'XX': []
         }
 
+        if inverse:
+            self.ground_state = self.groundState()
+
         self.nok = []
         for subset in product([0, 1], repeat=self.N):
             arr = np.array(subset)
@@ -38,6 +46,27 @@ class IsingEvol():
 
         if gpu:
             backend.set_options(device='GPU')
+
+    def groundState(self):
+        log.info("Computing Ground state")
+        heisenberg_model = HeisenbergModel(LineLattice(num_nodes=self.N, boundary_condition=(
+            BoundaryCondition.PERIODIC if self.periodic else BoundaryCondition.OPEN)), (self.J, 0, 0), (0, 0, self.h))
+
+        iterator = heisenberg_model.second_q_op().terms()
+
+        result = []
+        for term in iterator:
+            coeff = term[-1]
+            paulis = term[0]
+
+            pauli = paulis[0][0] * 2
+            positions = [term[1] for term in paulis]
+            result.append((pauli, positions, coeff))
+
+        matr = SparsePauliOp.from_sparse_list(result, num_qubits=self.N).to_matrix(sparse=True)
+        eigval, eigvec = eigsh(matr, which="SA", k=1)
+        log.info(f"Computed groundstate with eigenvalue {eigval}")
+        return eigvec
 
     def observables(self, obs_Z, obs_XX):
         operators_Z = []
@@ -71,7 +100,15 @@ class IsingEvol():
             qc.rz((h or self.h) * self.dt * proportion, idx)
 
         if step % sample_step == 0:
+            if self.inverse:
+                for idx in range(self.N):
+                    qc.h(idx)
+
             qc.save_statevector(label=str(int(step / sample_step)))
+
+            if self.inverse:
+                for idx in range(self.N):
+                    qc.h(idx)
 
     def circuit(self, steps, linear_increase=True, samples=1, h=None):
         log.info(f"Building circuit for {steps} steps")
@@ -79,15 +116,19 @@ class IsingEvol():
         self.linear_increase = linear_increase
         qc = QuantumCircuit(self.N)
 
-        qc.h(0)
-        for idx in range(self.N - 1):
-            qc.cnot(0, idx + 1)
+        if self.inverse:
+            qc.set_statevector(self.ground_state)
+        else:
+            qc.h(0)
+            for idx in range(self.N - 1):
+                qc.cnot(0, idx + 1)
 
-        for idx in range(self.N):
-            qc.h(idx)
+            for idx in range(self.N):
+                qc.h(idx)
 
         for step in tqdm.tqdm(range(1, steps + 1), disable=not self.progress):
-            self.evolution_step(qc, step=step, proportion=(step / steps if linear_increase else 1),
+            self.evolution_step(qc, step=step, proportion=(
+                (1 - step / steps if self.inverse else step / steps) if linear_increase else 1),
                                 sample_step=sample_step, h=h)
         return qc
 

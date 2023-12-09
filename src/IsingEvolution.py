@@ -41,7 +41,8 @@ class IsingEvol():
         self.nok = []
         for subset in product([0, 1], repeat=self.N):
             arr = np.array(subset)
-            self.nok.append(np.sum(np.abs(arr[0:-1] - arr[1:])) / self.N)
+            self.nok.append(
+                (np.sum(np.abs(arr[0:-1] - arr[1:])) + (np.abs(arr[0] - arr[-1]) if periodic else 0)) / self.N)
         self.nok = np.array(self.nok)
 
         if gpu:
@@ -59,9 +60,16 @@ class IsingEvol():
             coeff = term[-1]
             paulis = term[0]
 
-            pauli = paulis[0][0] * 2
+            pauli = paulis[0][0] * len(paulis)
             positions = [term[1] for term in paulis]
             result.append((pauli, positions, coeff))
+
+        # for i in range(self.N):
+        #     for j in range(i + 1, self.N):
+        #         result.append(('XX', [i, j], self.J / (np.abs(i - j) ** 6)))
+        #
+        # for i in range(self.N):
+        #     result.append(('Z', [i], self.h))
 
         matr = SparsePauliOp.from_sparse_list(result, num_qubits=self.N).to_matrix(sparse=True)
         eigval, eigvec = eigsh(matr, which="SA", k=1)
@@ -96,10 +104,15 @@ class IsingEvol():
         if self.periodic:
             qc.rxx(2 * self.J * self.dt, self.N - 1, 0)
 
+        # for i in range(self.N):
+        #     for j in range(i + 1, self.N):
+        #         qc.rxx(2 * self.J * self.dt, i, j)
+
         for idx in range(self.N):
             qc.rz((h or self.h) * self.dt * proportion, idx)
 
         if step % sample_step == 0:
+            # Measurement in X-Basis
             if self.inverse:
                 for idx in range(self.N):
                     qc.h(idx)

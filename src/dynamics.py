@@ -41,7 +41,7 @@ def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples
     kdens_mean = nok[:, 0]
     kdens_sig = nok[:, 1]
 
-    filename = f'kinks_N{N}_J{J}_h{h}_dt{dt}_steps{trotter_steps}_periodic{periodic}'
+    filename = f'kinks_N{N}_J{J}_h{h}_dt{dt}_steps{trotter_steps}_periodic{periodic}_inv{inverse}'
     plot_dependency(filename, np.array(tau), np.array(kdens_mean), np.array(kdens_sig))
     things_to_save = [tau, kdens_mean, kdens_sig]
 
@@ -50,11 +50,11 @@ def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples
 
 
 def estimate_kinks_magnetic_dependency(N, dt, h, J, trotter_steps, gpu=False, samples=1, periodic=False, inverse=False):
-    h_array = np.linspace(0, h, trotter_steps)
+    h_array = np.linspace(0, h, 100)
     ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, periodic=periodic, inverse=inverse)
     ising_model_evolution.progress = False
 
-    iteration_kinks(ising_model_evolution, 100, 1, 0)
+    iteration_kinks(ising_model_evolution, trotter_steps, 1, 0)
 
     with Pool() as pool:
         nok = np.array(pool.starmap(iteration_kinks,
@@ -67,7 +67,7 @@ def estimate_kinks_magnetic_dependency(N, dt, h, J, trotter_steps, gpu=False, sa
     kdens_mean = nok[:, 0]
     kdens_sig = nok[:, 1]
 
-    filename = f'kinks_N{N}_J{J}_h_max{h}_dt{dt}_steps{trotter_steps}_periodic{periodic}'
+    filename = f'kinks_N{N}_J{J}_h_max{h}_dt{dt}_steps{trotter_steps}_periodic{periodic}_inv{inverse}'
     plot_dependency(filename, np.array(h_array), np.array(kdens_mean), np.array(kdens_sig), xlabel="Magnetic field h")
     # plot_dependency(filename, np.array(h_array), np.array(nok), np.array(trotter_steps * [0]),
     #                 xlabel="Magnetic field h")
@@ -146,7 +146,7 @@ if __name__ == '__main__':
     dt_ = args.dt  # time step
     obs_Z_ = [5, 6]
     obs_XX_ = [[4, 14], [5, 6]]
-    data_start = 10
+    data_start = 100
     gpu_usage = bool(args.gpu)
     samples_ = args.samples
     mode = args.mode
@@ -157,7 +157,7 @@ if __name__ == '__main__':
         estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_, gpu=bool(args.gpu), samples=samples_,
                                       periodic=periodic, inverse=inverse)
 
-        filename = f"kinks_N{N_}_J{J_}_h{h_}_dt{dt_}_steps{trotter_steps_}_periodic{periodic}"
+        filename = f"kinks_N{N_}_J{J_}_h{h_}_dt{dt_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}"
         tau, kinks_mean, kinks_sig = np.array(load_file("../data/" + filename))
         popt, pcov = fit_kinks(tau[data_start:], kinks_mean[data_start:], kinks_sig[data_start:] + 1e-15)
         plot_dependency("../figs/" + filename, tau, kinks_mean, kinks_sig, plot_fit=True, a=popt[0], e=popt[1])

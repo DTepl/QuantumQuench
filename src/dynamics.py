@@ -10,9 +10,10 @@ from scipy.optimize import curve_fit
 import pickle
 
 
-def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, gpu=False, linear_increase=True, samples=1, inverse=False):
+def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, gpu=False, linear_increase=True, periodic=False, samples=1,
+                  inverse=False, bias=None):
     # Initialization
-    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, inverse=inverse)
+    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, inverse=inverse, bias=bias, periodic=periodic)
     ising_model_evolution.observables(obs_Z, obs_XX)
 
     # Execution
@@ -28,8 +29,9 @@ def iteration_kinks(ising_model_evolution, steps, samples, h=None):
     return [nok_mean, nok_sig]
 
 
-def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples=1, periodic=False, inverse=False):
-    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, periodic=periodic, inverse=inverse)
+def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples=1, periodic=False, inverse=False,
+                                  bias=None):
+    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, periodic=periodic, inverse=inverse, bias=bias)
     ising_model_evolution.progress = False
     steps = range(1, trotter_steps + 1)
     tau = dt * np.array(steps)
@@ -41,17 +43,18 @@ def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples
     kdens_mean = nok[:, 0]
     kdens_sig = nok[:, 1]
 
-    filename = f'kinks_N{N}_J{J}_h{h}_dt{dt}_steps{trotter_steps}_periodic{periodic}_inv{inverse}'
-    plot_dependency(filename, np.array(tau), np.array(kdens_mean), np.array(kdens_sig))
+    filename = f'kinks_N{N}_J{J}_h{h}_dt{dt}_steps{trotter_steps}_periodic{periodic}_inv{inverse}_bias{bias}'
+    # plot_dependency(filename, np.array(tau), np.array(kdens_mean), np.array(kdens_sig))
     things_to_save = [tau, kdens_mean, kdens_sig]
 
     with open("../data/" + filename, "wb") as f:
         pickle.dump(things_to_save, f)
 
 
-def estimate_kinks_magnetic_dependency(N, dt, h, J, trotter_steps, gpu=False, samples=1, periodic=False, inverse=False):
+def estimate_kinks_magnetic_dependency(N, dt, h, J, trotter_steps, gpu=False, samples=1, periodic=False, inverse=False,
+                                       bias=None):
     h_array = np.linspace(0, h, 100)
-    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, periodic=periodic, inverse=inverse)
+    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, periodic=periodic, inverse=inverse, bias=bias)
     ising_model_evolution.progress = False
 
     iteration_kinks(ising_model_evolution, trotter_steps, 1, 0)
@@ -67,7 +70,7 @@ def estimate_kinks_magnetic_dependency(N, dt, h, J, trotter_steps, gpu=False, sa
     kdens_mean = nok[:, 0]
     kdens_sig = nok[:, 1]
 
-    filename = f'kinks_N{N}_J{J}_h_max{h}_dt{dt}_steps{trotter_steps}_periodic{periodic}_inv{inverse}'
+    filename = f'kinks_N{N}_J{J}_h_max{h}_dt{dt}_steps{trotter_steps}_periodic{periodic}_inv{inverse}_bias{bias}'
     plot_dependency(filename, np.array(h_array), np.array(kdens_mean), np.array(kdens_sig), xlabel="Magnetic field h")
     # plot_dependency(filename, np.array(h_array), np.array(nok), np.array(trotter_steps * [0]),
     #                 xlabel="Magnetic field h")
@@ -77,27 +80,46 @@ def estimate_kinks_magnetic_dependency(N, dt, h, J, trotter_steps, gpu=False, sa
         pickle.dump(things_to_save, f)
 
 
-def plot_dependency(filename, tau, kdens_mean, kdens_sig, plot_fit=False, a=0, e=0, xlabel=None):
+def plot_dependency(filename, tau, kdens_mean, kdens_sig, plot_fit=False, a=0, e=0, g=0, xlabel=None, data_start=0):
     plt.plot(tau, kdens_mean)
-    print(e)
+    print(f"exponent: {e}")
+    print(f"parallel magnetic: {(g / 6.89) ** (15 / 16)}")
     if plot_fit:
-        plt.plot(tau, kink_density_theory(tau, a, e),
-                 label=f"$f(\\tau)={round(a, 2)} \\cdot \\tau ** ({round(e, 2)})$")
+        fit = kink_density_theory(tau, a, e, g)
+        figure, ax = plt.subplots(2, figsize=(8, 6), gridspec_kw={'height_ratios': [2, 1]})
+        ax[1].set_xlabel(xlabel or '$\\tau_Q$')
+        ax[0].set_ylabel('Kink density')
+        ax[1].set_ylabel("Residuals")
+        ax[0].plot(tau, kdens_mean)
+        ax[0].plot(tau, fit,
+                   label=f"$f(\\tau)={round(a, 2)} \\cdot \\tau ** ({round(e, 2)}) * e**(-\\tau_Q*{round(g, 2)})$")
+        ax[0].plot(tau, kink_density_theory(tau, 1 / (2 * np.pi * np.sqrt(2)), -0.5, g), label="Theory", linestyle="--")
+        ax[1].plot(tau[data_start:], (kdens_mean - fit)[data_start:], label="Data - fit")
+        ax[1].axhline(0, color="red", linestyle="--")
+        ax[0].set_yscale("log")
+        ax[0].set_xscale("log")
+        ax[1].set_xscale("log")
 
-        plt.plot(tau, kink_density_theory(tau, 1 / (2 * np.pi * np.sqrt(2)), -0.5), label="Theory", linestyle="--")
+        ax[0].legend()
+        ax[1].legend()
+        ax[0].grid()
+        ax[1].grid()
+        plt.tight_layout()
+        plt.savefig("../figs/" + filename + ".png")
+    else:
+        plt.plot(tau, kdens_mean)
+        plt.fill_between(tau, kdens_mean - kdens_sig, kdens_mean + kdens_sig, alpha=0.2)
+        plt.xlabel(xlabel or '$\\tau_Q$')
+        plt.ylabel('Kink density')
+        plt.yscale("log")
+        plt.xscale("log")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig("../figs/" + filename + ".png")
 
-    plt.fill_between(tau, kdens_mean - kdens_sig, kdens_mean + kdens_sig, alpha=0.2)
-    plt.xlabel(xlabel or '$\\tau_Q$')
-    plt.ylabel('Kink density')
-    plt.yscale("log")
-    plt.xscale("log")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig("../figs/" + filename + ".png")
 
-
-def kink_density_theory(tau, a, e):
-    return a * tau ** e
+def kink_density_theory(tau, a, e, g):
+    return a * tau ** e * np.exp(-tau * g)
 
 
 def fit_kinks(tau, kinks, kinks_sigma):
@@ -136,6 +158,8 @@ if __name__ == '__main__':
                         default=0)
     parser.add_argument("-inv", "--inverse", help="1 for inverse magnetic field ramp h_0 -> 0 else 0 -> h_0", type=int,
                         default=0)
+    parser.add_argument("-b", "--bias", help="Bias for the parallel magnetic field. default: None", type=float,
+                        default=None)
 
     args = parser.parse_args()
 
@@ -146,24 +170,26 @@ if __name__ == '__main__':
     dt_ = args.dt  # time step
     obs_Z_ = [5, 6]
     obs_XX_ = [[4, 14], [5, 6]]
-    data_start = 100
+    data_start = 5
     gpu_usage = bool(args.gpu)
     samples_ = args.samples
     mode = args.mode
     periodic = bool(args.periodic)
     inverse = bool(args.inverse)
+    bias = args.bias
 
     if mode == 0:
         estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_, gpu=bool(args.gpu), samples=samples_,
-                                      periodic=periodic, inverse=inverse)
+                                      periodic=periodic, inverse=inverse, bias=bias)
 
-        filename = f"kinks_N{N_}_J{J_}_h{h_}_dt{dt_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}"
+        filename = f"kinks_N{N_}_J{J_}_h{h_}_dt{dt_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}"
         tau, kinks_mean, kinks_sig = np.array(load_file("../data/" + filename))
         popt, pcov = fit_kinks(tau[data_start:], kinks_mean[data_start:], kinks_sig[data_start:] + 1e-15)
-        plot_dependency("../figs/" + filename, tau, kinks_mean, kinks_sig, plot_fit=True, a=popt[0], e=popt[1])
+        plot_dependency("../figs/" + filename, tau, kinks_mean, kinks_sig, plot_fit=True, a=popt[0], e=popt[1],
+                        g=popt[2], data_start=data_start)
     elif mode == 1:
         evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_, gpu=bool(args.gpu), samples=samples_,
-                      periodic=periodic, inverse=inverse)
+                      periodic=periodic, inverse=inverse, bias=bias)
     elif mode == 2:
         estimate_kinks_magnetic_dependency(N_, dt_, h_, J_, trotter_steps_, gpu=bool(args.gpu), samples=samples_,
                                            periodic=periodic, inverse=inverse)

@@ -6,9 +6,6 @@ from qiskit import QuantumCircuit
 from qiskit.quantum_info.operators import SparsePauliOp
 from qiskit_aer import Aer
 from itertools import product
-
-from qiskit_nature.second_q.hamiltonians.lattices import LineLattice, BoundaryCondition
-from qiskit_nature.second_q.hamiltonians import HeisenbergModel
 from scipy.sparse.linalg import eigsh
 
 log.basicConfig(level=log.INFO, filename="output.log")
@@ -17,10 +14,11 @@ backend = Aer.get_backend('aer_simulator_statevector')
 
 class IsingEvol():
 
-    def __init__(self, N, dt, h, J, gpu=False, periodic=False, inverse=False):
+    def __init__(self, N, dt, h, J, gpu=False, periodic=False, inverse=False, bias=None):
         self.N = N
         self.dt = dt
         self.h = h
+        self.bias_parallel = bias
         self.J = J
         self.periodic = periodic
         self.inverse = inverse
@@ -50,26 +48,21 @@ class IsingEvol():
 
     def groundState(self):
         log.info("Computing Ground state")
-        heisenberg_model = HeisenbergModel(LineLattice(num_nodes=self.N, boundary_condition=(
-            BoundaryCondition.PERIODIC if self.periodic else BoundaryCondition.OPEN)), (self.J, 0, 0), (0, 0, self.h))
-
-        iterator = heisenberg_model.second_q_op().terms()
 
         result = []
-        for term in iterator:
-            coeff = term[-1]
-            paulis = term[0]
 
-            pauli = paulis[0][0] * len(paulis)
-            positions = [term[1] for term in paulis]
-            result.append((pauli, positions, coeff))
+        for i in range(self.N - 1):
+            result.append(('XX', [i, i + 1], self.J))
 
-        # for i in range(self.N):
-        #     for j in range(i + 1, self.N):
-        #         result.append(('XX', [i, j], self.J / (np.abs(i - j) ** 6)))
-        #
-        # for i in range(self.N):
-        #     result.append(('Z', [i], self.h))
+        if self.periodic:
+            result.append(('XX', [0, self.N - 1], self.J))
+
+        for i in range(self.N):
+            result.append(('Z', [i], self.h))
+
+        if self.bias_parallel:
+            for i in range(self.N):
+                result.append(('X', [i], self.bias_parallel))
 
         matr = SparsePauliOp.from_sparse_list(result, num_qubits=self.N).to_matrix(sparse=True)
         eigval, eigvec = eigsh(matr, which="SA", k=1)
@@ -95,6 +88,11 @@ class IsingEvol():
 
     # Second order trotter formula
     def evolution_step(self, qc, step=1, proportion=1.0, sample_step=1, h=None):
+
+        if self.bias_parallel:
+            for idx in range(self.N):
+                qc.rx(self.bias_parallel * self.dt, idx)
+
         for idx in range(self.N):
             qc.rz((h or self.h) * self.dt * proportion, idx)
 
@@ -104,12 +102,12 @@ class IsingEvol():
         if self.periodic:
             qc.rxx(2 * self.J * self.dt, self.N - 1, 0)
 
-        # for i in range(self.N):
-        #     for j in range(i + 1, self.N):
-        #         qc.rxx(2 * self.J * self.dt, i, j)
-
         for idx in range(self.N):
             qc.rz((h or self.h) * self.dt * proportion, idx)
+
+        if self.bias_parallel:
+            for idx in range(self.N):
+                qc.rx(self.bias_parallel * self.dt, idx)
 
         if step % sample_step == 0:
             # Measurement in X-Basis

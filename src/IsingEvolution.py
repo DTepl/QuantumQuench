@@ -5,7 +5,6 @@ import logging as log
 from qiskit import QuantumCircuit
 from qiskit.quantum_info.operators import SparsePauliOp
 from qiskit_aer import Aer
-from itertools import product
 from scipy.sparse.linalg import eigsh
 
 log.basicConfig(level=log.INFO, filename="output.log")
@@ -36,12 +35,7 @@ class IsingEvol():
         if inverse:
             self.ground_state = self.groundState()
 
-        self.nok = []
-        for subset in product([0, 1], repeat=self.N):
-            arr = np.array(subset)
-            self.nok.append(
-                (np.sum(np.abs(arr[0:-1] - arr[1:])) + (np.abs(arr[0] - arr[-1]) if periodic else 0)) / self.N)
-        self.nok = np.array(self.nok)
+        self.nok = self.nok_observable()
 
         if gpu:
             backend.set_options(device='GPU')
@@ -68,6 +62,20 @@ class IsingEvol():
         eigval, eigvec = eigsh(matr, which="SA", k=1)
         log.info(f"Computed groundstate with eigenvalue {eigval}")
         return eigvec
+
+    def nok_observable(self):
+        log.info(f"Computing Observable")
+        result = [('I', [1], self.N - (0 if self.periodic else 1))]
+
+        for i in range(self.N - 1):
+            result.append(('XX', [i, i + 1], -1))
+
+        if self.periodic:
+            result.append(('XX', [0, self.N - 1], -1))
+
+        matr = SparsePauliOp.from_sparse_list(result, num_qubits=self.N).to_matrix(sparse=True) / (2 * self.N)
+        log.info(f"Observable computed")
+        return matr
 
     def observables(self, obs_Z, obs_XX):
         operators_Z = []
@@ -110,21 +118,11 @@ class IsingEvol():
                 qc.rx(self.bias_parallel * self.dt, idx)
 
         if step % sample_step == 0:
-            # Measurement in X-Basis
-            if self.inverse:
-                for idx in range(self.N):
-                    qc.h(idx)
-
             qc.save_statevector(label=str(int(step / sample_step)))
 
-            if self.inverse:
-                for idx in range(self.N):
-                    qc.h(idx)
-
-    def circuit(self, steps, linear_increase=True, samples=1, h=None):
+    def circuit(self, steps, samples=1, h=None):
         log.info(f"Building circuit for {steps} steps")
         sample_step = max(np.floor(steps / samples), 1)
-        self.linear_increase = linear_increase
         qc = QuantumCircuit(self.N)
 
         if self.inverse:
@@ -139,12 +137,12 @@ class IsingEvol():
 
         for step in tqdm.tqdm(range(1, steps + 1), disable=not self.progress):
             self.evolution_step(qc, step=step, proportion=(
-                (1 - step / steps if self.inverse else step / steps) if linear_increase else 1),
+                (1 - step / steps if self.inverse else step / steps) if self.linear_increase else 1),
                                 sample_step=sample_step, h=h)
         return qc
 
-    def execute(self, steps=1, linear_increase=True, draw=False, samples=1, h=None):
-        qc = self.circuit(steps, linear_increase=linear_increase, samples=samples, h=h)
+    def execute(self, steps=1, draw=False, samples=1, h=None):
+        qc = self.circuit(steps, samples=samples, h=h)
         if draw:
             print(qc)
 
@@ -171,7 +169,7 @@ class IsingEvol():
         exp_kinks = []
         for step in tqdm.tqdm(range(1, len(states) + 1), disable=not self.progress):
             exp_kinks.append(
-                np.real(np.dot(np.conj(states[str(step)].data), self.nok * states[str(step)].data)))
+                np.real(np.conj(states[str(step)].data) @ self.nok @ states[str(step)].data))
         log.info(f"Finished computing expectation values for number of kinks ({len(states)} states)")
 
         if raw:

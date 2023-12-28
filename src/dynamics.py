@@ -10,15 +10,14 @@ from scipy.optimize import curve_fit
 import pickle
 
 
-def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, gpu=False, linear_increase=True, periodic=False, samples=1,
+def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, gpu=False, periodic=False, samples=1,
                   inverse=False, bias=None):
     # Initialization
     ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, inverse=inverse, bias=bias, periodic=periodic)
     ising_model_evolution.observables(obs_Z, obs_XX)
 
     # Execution
-    states = ising_model_evolution.execute(draw=False, steps=trotter_steps, linear_increase=linear_increase,
-                                           samples=samples)
+    states = ising_model_evolution.execute(draw=False, steps=trotter_steps, samples=samples)
     expectations = ising_model_evolution.compute_expectationvals(states)
     ising_model_evolution.plot(expectations)
 
@@ -44,7 +43,6 @@ def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples
     kdens_sig = nok[:, 1]
 
     filename = f'kinks_N{N}_J{J}_h{h}_dt{dt}_steps{trotter_steps}_periodic{periodic}_inv{inverse}_bias{bias}'
-    # plot_dependency(filename, np.array(tau), np.array(kdens_mean), np.array(kdens_sig))
     things_to_save = [tau, kdens_mean, kdens_sig]
 
     with open("../data/" + filename, "wb") as f:
@@ -80,7 +78,8 @@ def estimate_kinks_magnetic_dependency(N, dt, h, J, trotter_steps, gpu=False, sa
         pickle.dump(things_to_save, f)
 
 
-def plot_dependency(filename, tau, kdens_mean, kdens_sig, plot_fit=False, a=0, e=0, g=0, xlabel=None, data_start=0):
+def plot_dependency(filename, tau, kdens_mean, kdens_sig, plot_fit=False, a=0, e=0, g=0, xlabel=None, data_start=0,
+                    data_end=-1):
     plt.plot(tau, kdens_mean)
     print(f"exponent: {e}")
     print(f"parallel magnetic: {(g / 6.89) ** (15 / 16)}")
@@ -91,10 +90,11 @@ def plot_dependency(filename, tau, kdens_mean, kdens_sig, plot_fit=False, a=0, e
         ax[0].set_ylabel('Kink density')
         ax[1].set_ylabel("Residuals")
         ax[0].plot(tau, kdens_mean)
-        ax[0].plot(tau, fit,
+        ax[0].plot(tau[:data_end], fit[:data_end],
                    label=f"$f(\\tau)={round(a, 2)} \\cdot \\tau ** ({round(e, 2)}) * e**(-\\tau_Q*{round(g, 2)})$")
-        ax[0].plot(tau, kink_density_theory(tau, 1 / (2 * np.pi * np.sqrt(2)), -0.5, g), label="Theory", linestyle="--")
-        ax[1].plot(tau[data_start:], (kdens_mean - fit)[data_start:], label="Data - fit")
+        ax[0].plot(tau[:data_end], kink_density_theory(tau, 1 / (2 * np.pi * np.sqrt(2)), -0.5, g)[:data_end],
+                   label="Theory", linestyle="--")
+        ax[1].plot(tau[data_start:data_end], (kdens_mean - fit)[data_start:data_end], label="Data - fit")
         ax[1].axhline(0, color="red", linestyle="--")
         ax[0].set_yscale("log")
         ax[0].set_xscale("log")
@@ -170,7 +170,8 @@ if __name__ == '__main__':
     dt_ = args.dt  # time step
     obs_Z_ = [5, 6]
     obs_XX_ = [[4, 14], [5, 6]]
-    data_start = 5
+    data_start = 7
+    data_end = 100
     gpu_usage = bool(args.gpu)
     samples_ = args.samples
     mode = args.mode
@@ -184,9 +185,10 @@ if __name__ == '__main__':
 
         filename = f"kinks_N{N_}_J{J_}_h{h_}_dt{dt_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}"
         tau, kinks_mean, kinks_sig = np.array(load_file("../data/" + filename))
-        popt, pcov = fit_kinks(tau[data_start:], kinks_mean[data_start:], kinks_sig[data_start:] + 1e-15)
+        popt, pcov = fit_kinks(tau[data_start:data_end], kinks_mean[data_start:data_end],
+                               kinks_sig[data_start:data_end] + 1e-15)
         plot_dependency("../figs/" + filename, tau, kinks_mean, kinks_sig, plot_fit=True, a=popt[0], e=popt[1],
-                        g=popt[2], data_start=data_start)
+                        g=popt[2], data_start=data_start, data_end=data_end)
     elif mode == 1:
         evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_, gpu=bool(args.gpu), samples=samples_,
                       periodic=periodic, inverse=inverse, bias=bias)

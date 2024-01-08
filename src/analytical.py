@@ -1,6 +1,3 @@
-from itertools import repeat
-
-from scipy.sparse.linalg import eigsh, expm
 import numpy as np
 import logging as log
 import matplotlib.pyplot as plt
@@ -8,8 +5,6 @@ from multiprocessing import Pool
 import pickle
 from scipy.optimize import curve_fit
 from qutip import about, basis, expect, mesolve, qeye, sigmax, mcsolve, sigmaz, tensor, brmesolve, Options, sesolve
-
-from qiskit.quantum_info.operators import SparsePauliOp
 
 log.basicConfig(level=log.INFO)
 
@@ -21,81 +16,9 @@ class AnalyticalIsing:
         self.N = N
         self.dt = dt
         self.periodic = periodic
-        # self.interaction, self.external = self.basis()
-        # self.groundstate = self.groundstate()
         self.obs = self.observable()
         self.hamiltonian_comps = self.get_hamiltonian_components()
         self.H_t = [self.hamiltonian_comps[0], [self.hamiltonian_comps[1], f'{self.h}*(1 - (t/tq))']]
-
-    def basis(self):
-        log.info(f"Computing Hamiltonian basis")
-        interaction = []
-        external = []
-
-        for i in range(self.N - 1):
-            interaction.append(('XX', [i, i + 1], self.J))
-
-        if self.periodic:
-            interaction.append(('XX', [0, self.N - 1], self.J))
-
-        for i in range(self.N):
-            external.append(('Z', [i], 1))
-
-        interaction_matr = SparsePauliOp.from_sparse_list(interaction, num_qubits=self.N).to_matrix(sparse=True).tocsc()
-        external_matr = SparsePauliOp.from_sparse_list(external, num_qubits=self.N).to_matrix(sparse=True).tocsc()
-        log.info(f"Computed hamiltonian basis")
-        return interaction_matr, external_matr
-
-    def hamiltonian(self, proportion):
-        return self.interaction + self.h * (1 - proportion) * self.external
-
-    def groundstate(self):
-        log.info(f"Computing groundstate of hamiltonian")
-        eigval, eigvec = eigsh(self.hamiltonian(0), which="SA", k=1)
-        log.info(f"Computed groundstate with eigenvalue {eigval}")
-        return eigvec.flatten()
-
-    def quench(self, steps):
-        evol = self.groundstate
-        for i in range(1, steps + 1):
-            evol = expm(-1j * self.hamiltonian(i / steps) * self.dt) @ evol
-
-        log.info(f"Computed evolution operator for tq={self.dt * steps}")
-        log.info(f"Computing expectation values")
-        res_exp = np.abs(np.conj(evol) @ self.observable @ evol)
-        log.info(f"Expectation values computed!")
-        return res_exp
-
-    # def observable(self):
-    #     log.info(f"Computing Observable")
-    #     result = [('I', [1], self.N - (0 if self.periodic else 1))]
-    #
-    #     for i in range(self.N - 1):
-    #         result.append(('XX', [i, i + 1], -1))
-    #
-    #     if self.periodic:
-    #         result.append(('XX', [0, self.N - 1], -1))
-    #
-    #     matr = SparsePauliOp.from_sparse_list(result, num_qubits=self.N).to_matrix(sparse=True) / (2 * self.N)
-    #     log.info(f"Observable computed")
-    #     return matr
-
-    # def tau_sweep(self, resolution):
-    #     log.info(f"Doing tauQ sweep for max tq {self.dt * resolution} and {resolution} number of steps")
-    #     steps = range(1, resolution + 1)
-    #
-    #     with Pool() as pool:
-    #         nok = np.array(pool.map(self.quench, steps))
-    #
-    #     log.info(f"TauQ sweep done!")
-    #
-    #     filename = f'AnalyticalSolution_N{self.N}_J{self.J}_h{self.h}_dt{self.dt}_num{resolution}'
-    #     things_to_save = [np.array(steps) * self.dt, nok]
-    #
-    #     with open("../data/" + filename, "wb") as f:
-    #         pickle.dump(things_to_save, f)
-    #
-    #     return np.array(steps) * self.dt, nok
 
     def plot(self, tau, kink_density, A=0, e=0, g=0):
         plt.plot(tau, kink_density)
@@ -172,14 +95,6 @@ class AnalyticalIsing:
 
     def tau_sweep(self, t_max, resolution):
         tau = np.linspace(t_max / resolution, t_max, resolution)
-        # eigen, groundstate = self.get_groundstate(hamiltonian_comps[0] + self.h * hamiltonian_comps[1])
-        # res = self.evolve_state(H_t,groundstate, [observable], tau, args)
-
-        # length = len(tau) - 1
-        # for i in range(len(tau)):
-        #     args = {'tq': tau[i]}
-        #     res = self.evolve_state(self.H_t, tensor([basis(2, 1)] * self.N), [self.obs], tau[:i + 1], args)
-        #     print(res)
 
         with Pool() as pool:
             nok = np.array(pool.map(self._evolve_state, tau))
@@ -205,10 +120,8 @@ if __name__ == '__main__':
     periodic = False
 
     anaIsing = AnalyticalIsing(0.1, 12, -1, 8, periodic=periodic)
-    # tau, kink_density = anaIsing.tau_sweep(100)
     tau, kink_density = anaIsing.tau_sweep(t_max, res)
 
-    # filename = f"../data/AnalyticalSolution_N{anaIsing.N}_J{anaIsing.J}_h{anaIsing.h}_dt{anaIsing.dt}_num{res}"
     filename = f"../data/AnalyticalSolution_N{anaIsing.N}_J{anaIsing.J}_h{anaIsing.h}_tmax{t_max}_num{res}_periodic{periodic}"
     with open(filename, "rb") as f:
         things_to_load = pickle.load(f)
@@ -216,10 +129,3 @@ if __name__ == '__main__':
 
     popt, pcov = curve_fit(anaIsing.kink_density_theory, tau[start:end], kink_density[start:end])
     anaIsing.plot(tau, kink_density, popt[0], popt[1], popt[2])
-
-    # U, S, V = svd(anaIsing.hamiltonian(0))
-    # U2, S2, V2 = svd(anaIsing.hamiltonian(1))
-    # svdexpm = U @ expm(-1j * np.diag(S)) @ np.transpose(U)
-    # directexpm = expm(-1j * anaIsing.hamiltonian(0))
-    # print(svdexpm-directexpm < 1e-03)
-    # print(U @ np.transpose(U2))

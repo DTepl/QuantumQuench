@@ -10,11 +10,10 @@ log.basicConfig(level=log.INFO)
 
 
 class AnalyticalIsing:
-    def __init__(self, dt, N, J, h, periodic=False):
+    def __init__(self, N, J, h, periodic=False):
         self.J = J
         self.h = h
         self.N = N
-        self.dt = dt
         self.periodic = periodic
         self.obs = self.observable()
         self.hamiltonian_comps = self.get_hamiltonian_components()
@@ -120,7 +119,7 @@ if __name__ == '__main__':
     t_max = 100
     periodic = False
 
-    anaIsing = AnalyticalIsing(0.1, 12, -1, 2, periodic=periodic)
+    anaIsing = AnalyticalIsing(12, -1, 2, periodic=periodic)
     tau, kink_density = anaIsing.tau_sweep(t_max, res)
 
     filename = f"../data/AnalyticalSolution_N{anaIsing.N}_J{anaIsing.J}_h{anaIsing.h}_tmax{t_max}_num{res}_periodic{periodic}"

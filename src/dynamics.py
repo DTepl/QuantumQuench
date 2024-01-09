@@ -196,11 +196,12 @@ if __name__ == '__main__':
                         default=True)
 
     parser.add_argument("-m", "--mode",
-                        help="0 for kink density estimation, 1 for plain evolution of a given system and 2 for kink density magnetic field estimation",
+                        help="0 for kink density estimation, 1 for plain evolution of a given system, 2 for kink density magnetic field estimation and 3 for fidelity estimation",
                         type=int,
                         default=0)
     parser.add_argument("-gpu", "--gpu", help="1 to use GPU, else CPU", type=int, default=0)
-    parser.add_argument("-s", "--samples", help="Number of samples to get from a run", type=int,
+    parser.add_argument("-s", "--samples", help="Number of sample states to get from one execution of the circuit",
+                        type=int,
                         default=1)
     parser.add_argument("-p", "--periodic", help="1 for Periodic boundary conditions else Open", type=int,
                         default=0)

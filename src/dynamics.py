@@ -158,7 +158,7 @@ def plot_dependency(filename, tau, kdens_mean, kdens_sig, plot_fit=False, a=0, e
 def plot_fidelities(dt, steps, fidelities, filename):
     steps_arr = np.array(range(1, steps + 1)) / steps
     for i, fids in enumerate(fidelities):
-        plt.plot(steps_arr, fids, label=f"$\tau_Q$={steps * dt[i]}")
+        plt.plot(steps_arr, fids, label=f"$\\tau_Q$={steps * dt[i]}")
         plt.xlabel('$t/\\tau_Q$')
         plt.ylabel('Fidelity')
         plt.legend()

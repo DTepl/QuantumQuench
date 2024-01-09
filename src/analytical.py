@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from multiprocessing import Pool
 import pickle
 from scipy.optimize import curve_fit
-from qutip import about, basis, expect, mesolve, qeye, sigmax, mcsolve, sigmaz, tensor, brmesolve, Options, sesolve
+from qutip import basis, qeye, sigmax, sigmaz, tensor, Options, sesolve
 
 log.basicConfig(level=log.INFO)
 
@@ -34,7 +34,7 @@ class AnalyticalIsing:
             f"../figs/AnalyticalSolution_N{self.N}_J{self.J}_h{self.h}_tmax{int(tau[-1])}_num{len(tau)}_periodic{self.periodic}.png")
 
     def kink_density_theory(self, tau, a, e, g):
-        return a * tau ** e * np.exp(-tau * g)
+        return a * tau ** e #* np.exp(-tau * g)
 
     def get_hamiltonian_components(self):
         # Setup operators for individual qubits
@@ -84,7 +84,7 @@ class AnalyticalIsing:
         return obs / (2 * self.N)
 
     def evolve_state(self, H, psi0, exp, times, args):
-        return sesolve(H, psi0, times, e_ops=exp, args=args, options=Options(rhs_reuse=True)).expect[0][-1]
+        return sesolve(H, psi0, times, e_ops=exp, args=args, options=Options(rhs_reuse=True, nsteps=5000)).expect[0][-1]
 
     def _evolve_state(self, tau):
         # tau, step = tau_step
@@ -94,6 +94,7 @@ class AnalyticalIsing:
                                  args)
 
     def tau_sweep(self, t_max, resolution):
+        log.info(f"Doing tauQ sweep for max tq max {t_max} and {resolution} number of steps")
         tau = np.linspace(t_max / resolution, t_max, resolution)
 
         with Pool() as pool:
@@ -114,12 +115,12 @@ class AnalyticalIsing:
 
 if __name__ == '__main__':
     res = 1000
-    start = 100
-    end = -1
+    start = 1
+    end = 110
     t_max = 100
     periodic = False
 
-    anaIsing = AnalyticalIsing(0.1, 12, -1, 8, periodic=periodic)
+    anaIsing = AnalyticalIsing(0.1, 12, -1, 2, periodic=periodic)
     tau, kink_density = anaIsing.tau_sweep(t_max, res)
 
     filename = f"../data/AnalyticalSolution_N{anaIsing.N}_J{anaIsing.J}_h{anaIsing.h}_tmax{t_max}_num{res}_periodic{periodic}"

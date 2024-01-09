@@ -40,7 +40,7 @@ class IsingEvol():
         if gpu:
             backend.set_options(device='GPU')
 
-    def groundState(self):
+    def groundState(self, step=0, steps=1):
         log.info("Computing Ground state")
 
         result = []
@@ -52,13 +52,13 @@ class IsingEvol():
             result.append(('XX', [0, self.N - 1], self.J))
 
         for i in range(self.N):
-            result.append(('Z', [i], self.h))
+            result.append(('Z', [i], self.h * (1 - step / steps)))
 
         if self.bias_parallel:
             for i in range(self.N):
                 result.append(('X', [i], self.bias_parallel))
 
-        matr = SparsePauliOp.from_sparse_list(result, num_qubits=self.N).to_matrix(sparse=True)
+        matr = np.real(SparsePauliOp.from_sparse_list(result, num_qubits=self.N).to_matrix(sparse=True))
         eigval, eigvec = eigsh(matr, which="SA", k=1)
         log.info(f"Computed groundstate with eigenvalue {eigval}")
         return eigvec
@@ -73,7 +73,7 @@ class IsingEvol():
         if self.periodic:
             result.append(('XX', [0, self.N - 1], -1))
 
-        matr = SparsePauliOp.from_sparse_list(result, num_qubits=self.N).to_matrix(sparse=True) / (2 * self.N)
+        matr = np.real(SparsePauliOp.from_sparse_list(result, num_qubits=self.N).to_matrix(sparse=True)) / (2 * self.N)
         log.info(f"Observable computed")
         return matr
 

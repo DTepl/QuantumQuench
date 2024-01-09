@@ -28,6 +28,23 @@ def iteration_kinks(ising_model_evolution, steps, samples, h=None):
     return [nok_mean, nok_sig]
 
 
+def iteration_fidelity_simulation(N, h, J, dt, steps, samples, periodic, inverse, bias, gpu):
+    ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, periodic=periodic, inverse=inverse, bias=bias)
+    ising_model_evolution.progress = False
+    states = ising_model_evolution.execute(draw=False, steps=steps, samples=samples)
+
+    arr = []
+    for step in range(1, len(states) + 1):
+        arr.append(states[str(step)].data)
+
+    return np.array(arr)
+
+
+def iteration_fidelity_groundstate_dot(ising_obj, state, step, steps):
+    groundstate = ising_obj.groundState(step, steps)
+    return (np.abs(np.conj(state) @ groundstate) ** 2).flatten()
+
+
 def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples=1, periodic=False, inverse=False,
                                   bias=None):
     ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, periodic=periodic, inverse=inverse, bias=bias)
@@ -78,6 +95,26 @@ def estimate_kinks_magnetic_dependency(N, dt, h, J, trotter_steps, gpu=False, sa
         pickle.dump(things_to_save, f)
 
 
+def fidelity_measurement(N, h, J, steps, dt, gpu=False, periodic=False, inverse=False, bias=None):
+    params = zip(repeat(N), repeat(h), repeat(J), dt, repeat(steps), repeat(steps), repeat(periodic), repeat(inverse),
+                 repeat(bias), repeat(gpu))
+
+    with Pool() as pool:
+        states = np.array(pool.starmap(iteration_fidelity_simulation, params))
+
+        groundstate_computer = IsingEvol(N, 0, h, J, gpu=gpu, periodic=periodic, inverse=inverse, bias=bias)
+        # Swap axes from (5,100,-1) to (100,5,-1) where 5 are the number of dt's and 100 are the steps
+        fidelities = pool.starmap(iteration_fidelity_groundstate_dot,
+                                  zip(repeat(groundstate_computer), np.swapaxes(states, 0, 1), range(1, steps + 1),
+                                      repeat(steps)))
+
+    filename = f'fidelity_N{N}_J{J}_h{h}_steps{steps}_periodic{periodic}_inv{inverse}_bias{bias}'
+    things_to_save = [steps, np.swapaxes(fidelities, 0, 1), 0]  # swap back for easier plotting
+
+    with open("../data/" + filename, "wb") as f:
+        pickle.dump(things_to_save, f)
+
+
 def plot_dependency(filename, tau, kdens_mean, kdens_sig, plot_fit=False, a=0, e=0, g=0, xlabel=None, data_start=0,
                     data_end=-1):
     plt.plot(tau, kdens_mean)
@@ -113,6 +150,17 @@ def plot_dependency(filename, tau, kdens_mean, kdens_sig, plot_fit=False, a=0, e
         plt.ylabel('Kink density')
         plt.yscale("log")
         plt.xscale("log")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig("../figs/" + filename + ".png")
+
+
+def plot_fidelities(dt, steps, fidelities, filename):
+    steps_arr = np.array(range(1, steps + 1)) / steps
+    for i, fids in enumerate(fidelities):
+        plt.plot(steps_arr, fids, label=f"$\tau_Q$={steps * dt[i]}")
+        plt.xlabel('$t/\\tau_Q$')
+        plt.ylabel('Fidelity')
         plt.legend()
         plt.tight_layout()
         plt.savefig("../figs/" + filename + ".png")
@@ -171,8 +219,8 @@ if __name__ == '__main__':
     obs_Z_ = [5, 6]
     obs_XX_ = [[4, 14], [5, 6]]
     data_start = 7
-    data_end = 100
-    gpu_usage = bool(args.gpu)
+    data_end = 200
+    gpu_ = bool(args.gpu)
     samples_ = args.samples
     mode = args.mode
     periodic = bool(args.periodic)
@@ -180,7 +228,7 @@ if __name__ == '__main__':
     bias = args.bias
 
     if mode == 0:
-        estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_, gpu=bool(args.gpu), samples=samples_,
+        estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_, gpu=gpu_, samples=samples_,
                                       periodic=periodic, inverse=inverse, bias=bias)
 
         filename = f"kinks_N{N_}_J{J_}_h{h_}_dt{dt_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}"
@@ -195,5 +243,9 @@ if __name__ == '__main__':
     elif mode == 2:
         estimate_kinks_magnetic_dependency(N_, dt_, h_, J_, trotter_steps_, gpu=bool(args.gpu), samples=samples_,
                                            periodic=periodic, inverse=inverse)
-
-    # plot_dependency("../figs/kinks_N20_J-0.25_h-1.5_dt0.1_steps100", tau, kinks_mean, kinks_sig)
+    elif mode == 3:
+        dt = np.array([0.00001, 0.0001, 0.001, 0.01, 0.1])
+        fidelity_measurement(N_, h_, J_, trotter_steps_, dt, gpu_, periodic, inverse, bias)
+        filename = f'fidelity_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}'
+        steps, fidelities, _sig = load_file("../data/" + filename)
+        plot_fidelities(dt, steps, fidelities, filename)

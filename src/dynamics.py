@@ -24,8 +24,8 @@ def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, gpu=False, periodic
 
 def iteration_kinks(ising_model_evolution, steps, samples, h=None):
     states = ising_model_evolution.execute(draw=False, steps=steps, samples=samples, h=h)
-    nok_mean, nok_sig = ising_model_evolution.compute_kink_density(states)
-    return [nok_mean, nok_sig]
+    nok_mean, nok_var, nok_skewness = ising_model_evolution.compute_kink_density(states)
+    return [nok_mean, nok_var, nok_skewness]
 
 
 def iteration_fidelity_simulation(N, h, J, dt, steps, samples, periodic, inverse, bias, gpu):
@@ -56,11 +56,11 @@ def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples
         nok = np.array(
             pool.starmap(iteration_kinks, zip(repeat(ising_model_evolution), steps, repeat(samples), repeat(None))))
 
-    kdens_mean = nok[:, 0]
-    kdens_sig = nok[:, 1]
-
     filename = f'kinks_N{N}_J{J}_h{h}_dt{dt}_steps{trotter_steps}_periodic{periodic}_inv{inverse}_bias{bias}'
-    things_to_save = [tau, kdens_mean, kdens_sig]
+    kdens_exp = nok[:, 0]
+    kdens_var = nok[:, 1]
+    kdens_skew = nok[:, 2]
+    things_to_save = [tau, kdens_exp, kdens_var, kdens_skew]
 
     with open("../data/" + filename, "wb") as f:
         pickle.dump(things_to_save, f)
@@ -115,42 +115,47 @@ def fidelity_measurement(N, h, J, steps, dt, gpu=False, periodic=False, inverse=
         pickle.dump(things_to_save, f)
 
 
-def plot_dependency(filename, tau, kdens_mean, kdens_sig, plot_fit=False, a=0, e=0, g=0, xlabel=None, data_start=0,
-                    data_end=-1):
+def plot_dependency(filename, tau, kdens_mean, kdens_var, kdens_skewness, plot_fit=False, a=0, e=0, g=0, xlabel=None,
+                    data_start=0, data_end=-1):
     plt.plot(tau, kdens_mean)
     print(f"exponent: {e}")
     print(f"parallel magnetic: {(g / 6.89) ** (15 / 16)}")
     if plot_fit:
         fit = kink_density_theory(tau, a, e, g)
         figure, ax = plt.subplots(2, figsize=(8, 6), gridspec_kw={'height_ratios': [2, 1]})
-        ax[1].set_xlabel(xlabel or '$\\tau_Q$')
-        ax[0].set_ylabel('Kink density')
-        ax[1].set_ylabel("Residuals")
-        ax[0].plot(tau, kdens_mean)
+        ax[0].set_ylabel('Observables')
+        ax[0].plot(tau, kdens_mean, label="$\\left<N\\right>$")
+        ax[0].plot(tau, kdens_var, label="$\\left<N^2\\right> - \\left<N\\right>^2$")
+        ax[0].plot(tau, kdens_skewness, label="$\\left<(N-\\left<N\\right>)^3\\right>$")
         ax[0].plot(tau[:data_end], fit[:data_end],
                    label=f"$f(\\tau)={round(a, 2)} \\cdot \\tau ** ({round(e, 2)}) * e**(-\\tau_Q*{round(g, 2)})$")
         ax[0].plot(tau[:data_end], kink_density_theory(tau, 1 / (2 * np.pi * np.sqrt(2)), -0.5, g)[:data_end],
                    label="Theory", linestyle="--")
-        ax[1].plot(tau[data_start:data_end], (kdens_mean - fit)[data_start:data_end], label="Data - fit")
-        ax[1].axhline(0, color="red", linestyle="--")
         ax[0].set_yscale("log")
         ax[0].set_xscale("log")
-        ax[1].set_xscale("log")
-
         ax[0].legend()
-        ax[1].legend()
         ax[0].grid()
+
+        ax[1].set_xlabel(xlabel or '$\\tau_Q$')
+        ax[1].set_ylabel("Residuals")
+        ax[1].set_xscale("log")
+        ax[1].plot(tau[data_start:data_end], (kdens_mean - fit)[data_start:data_end], label="Data - fit")
+        ax[1].axhline(0, color="red", linestyle="--")
         ax[1].grid()
+        ax[1].legend()
+
         plt.tight_layout()
         plt.savefig("../figs/" + filename + ".png")
     else:
-        plt.plot(tau, kdens_mean)
-        plt.fill_between(tau, kdens_mean - kdens_sig, kdens_mean + kdens_sig, alpha=0.2)
+        plt.plot(tau, kdens_mean, label="$\\left<N\\right>$")
+        plt.plot(tau, kdens_var, label="$\\left<N^2\\right> - \\left<N\\right>^2$")
+        plt.plot(tau, kdens_skewness, label="$\\left<(N-\\left<N\\right>)^3\\right>$")
         plt.xlabel(xlabel or '$\\tau_Q$')
-        plt.ylabel('Kink density')
+        plt.ylabel('Observables')
         plt.yscale("log")
         plt.xscale("log")
         plt.legend()
+        plt.grid()
         plt.tight_layout()
         plt.savefig("../figs/" + filename + ".png")
 
@@ -170,16 +175,16 @@ def kink_density_theory(tau, a, e, g):
     return a * tau ** e * np.exp(-tau * g)
 
 
-def fit_kinks(tau, kinks, kinks_sigma):
-    return curve_fit(kink_density_theory, tau, kinks, sigma=kinks_sigma, maxfev=5000)
+def fit_kinks(tau, kinks):
+    return curve_fit(kink_density_theory, tau, kinks, maxfev=5000)
 
 
 def load_file(filename):
     with open(filename, "rb") as f:
         things_to_load = pickle.load(f)
 
-    [tau, kdens_mean, kdens_sig] = things_to_load
-    return tau, kdens_mean, kdens_sig
+    [tau, kdens_mean, kdens_var, *kdens_skewness] = things_to_load
+    return tau, kdens_mean, kdens_var, (kdens_skewness or [None])[0]
 
 
 if __name__ == '__main__':
@@ -233,11 +238,10 @@ if __name__ == '__main__':
                                       periodic=periodic, inverse=inverse, bias=bias)
 
         filename = f"kinks_N{N_}_J{J_}_h{h_}_dt{dt_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}"
-        tau, kinks_mean, kinks_sig = np.array(load_file("../data/" + filename))
-        popt, pcov = fit_kinks(tau[data_start:data_end], kinks_mean[data_start:data_end],
-                               kinks_sig[data_start:data_end] + 1e-15)
-        plot_dependency("../figs/" + filename, tau, kinks_mean, kinks_sig, plot_fit=True, a=popt[0], e=popt[1],
-                        g=popt[2], data_start=data_start, data_end=data_end)
+        tau, kinks_mean, kinks_var, kinks_skewness = np.array(load_file("../data/" + filename))
+        popt, pcov = fit_kinks(tau[data_start:data_end], kinks_mean[data_start:data_end])
+        plot_dependency("../figs/" + filename, tau, kinks_mean, kinks_var, kinks_skewness, plot_fit=True, a=popt[0],
+                        e=popt[1], g=popt[2], data_start=data_start, data_end=data_end)
     elif mode == 1:
         evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_, gpu=bool(args.gpu), samples=samples_,
                       periodic=periodic, inverse=inverse, bias=bias)

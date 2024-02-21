@@ -6,6 +6,7 @@ from qiskit import QuantumCircuit
 from qiskit.quantum_info.operators import SparsePauliOp
 from qiskit_aer import Aer
 from scipy.sparse.linalg import eigsh
+from scipy.sparse import identity
 
 log.basicConfig(level=log.INFO, filename="output.log")
 backend = Aer.get_backend('aer_simulator_statevector')
@@ -36,6 +37,8 @@ class IsingEvol():
             self.ground_state = self.groundState()
 
         self.nok = self.nok_observable()
+        self.nok_square = self.nok ** 2
+        self.nok_cube = self.nok ** 3
 
         if gpu:
             backend.set_options(device='GPU')
@@ -76,6 +79,19 @@ class IsingEvol():
         matr = np.real(SparsePauliOp.from_sparse_list(result, num_qubits=self.N).to_matrix(sparse=True)) / (2 * self.N)
         log.info(f"Observable computed")
         return matr
+
+    def nok_variance(self, exp_val):
+        log.info(f"Computing Variance Observable")
+        result = self.nok_square - exp_val ** 2 * identity(2 ** self.N)
+        log.info(f"Variance Observable computed")
+        return result
+
+    def nok_skewness(self, exp_val):
+        log.info(f"Computing Skewness Observable")
+        result = self.nok_cube - 3 * self.nok_square * exp_val + 3 * self.nok * exp_val ** 2 - exp_val ** 3 * identity(
+            2 ** self.N)
+        log.info(f"Skewness Observable computed")
+        return result
 
     def observables(self, obs_Z, obs_XX):
         operators_Z = []
@@ -165,17 +181,23 @@ class IsingEvol():
         return expectations
 
     def compute_kink_density(self, states, raw=False):
-        log.info(f"Computing expectation values for number of kinks ({len(states)} states)")
+        log.info(f"Computing expectation, variance and skewness values for number of kinks ({len(states)} states)")
         exp_kinks = []
+        var_kinks = []
+        skew_kinks = []
         for step in tqdm.tqdm(range(1, len(states) + 1), disable=not self.progress):
-            exp_kinks.append(
-                np.real(np.conj(states[str(step)].data) @ self.nok @ states[str(step)].data))
+            exp_val = np.real(np.conj(states[str(step)].data) @ self.nok @ states[str(step)].data)
+            exp_kinks.append(exp_val)
+            var_kinks.append(
+                np.real(np.conj(states[str(step)].data) @ self.nok_variance(exp_val) @ states[str(step)].data))
+            skew_kinks.append(
+                np.real(np.conj(states[str(step)].data) @ self.nok_skewness(exp_val) @ states[str(step)].data))
         log.info(f"Finished computing expectation values for number of kinks ({len(states)} states)")
 
         if raw:
             return exp_kinks
         else:
-            return np.mean(exp_kinks), np.var(exp_kinks)
+            return np.mean(exp_kinks), np.mean(var_kinks), np.mean(skew_kinks)
 
     def plot(self, expectations):
         log.info("Plotting observables...")

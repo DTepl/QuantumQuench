@@ -14,7 +14,7 @@ backend = Aer.get_backend('aer_simulator_statevector')
 
 class IsingEvol():
 
-    def __init__(self, N, dt, h, J, gpu=False, periodic=False, inverse=False, bias=None):
+    def __init__(self, N: int, dt: float, h: float, J: float, gpu=False, periodic=False, inverse=False, bias=None):
         self.N = N
         self.dt = dt
         self.h = h
@@ -24,14 +24,7 @@ class IsingEvol():
         self.inverse = inverse
         self.progress = True
         self.linear_increase = True
-        self.obs = {
-            'Z': [],
-            'XX': []
-        }
-        self.obs_idx = {
-            'Z': [],
-            'XX': []
-        }
+        self.obs = {}
 
         if inverse:
             self.ground_state = self.groundState()
@@ -43,7 +36,7 @@ class IsingEvol():
         if gpu:
             backend.set_options(device='GPU')
 
-    def groundState(self, step=0, steps=1):
+    def groundState(self, step: int = 0, steps: int = 1):
         log.info("Computing Ground state")
 
         result = []
@@ -80,35 +73,29 @@ class IsingEvol():
         log.info(f"Observable computed")
         return matr
 
-    def nok_variance(self, exp_val):
+    def nok_variance(self, exp_val: float):
         log.info(f"Computing Variance Observable")
         result = self.nok_square - exp_val ** 2 * identity(2 ** self.N)
         log.info(f"Variance Observable computed")
         return result
 
-    def nok_skewness(self, exp_val):
+    def nok_skewness(self, exp_val: float):
         log.info(f"Computing Skewness Observable")
         result = self.nok_cube - 3 * self.nok_square * exp_val + 3 * self.nok * exp_val ** 2 - exp_val ** 3 * identity(
             2 ** self.N)
         log.info(f"Skewness Observable computed")
         return result
 
-    def observables(self, obs_Z, obs_XX):
-        operators_Z = []
-        operators_XX = []
-
-        log.info(f"Generating observables for Z: {obs_Z} and XX: {obs_XX}")
-        for op in obs_Z:
-            pauli_str = "I" * (op - 1) + "Z" + "I" * (self.N - op)
-            operators_Z.append(SparsePauliOp(pauli_str))
-        for op in obs_XX:
-            pauli_str = "I" * (op[0] - 1) + "X" + "I" * (op[1] - op[0] - 1) + "X" + "I" * (self.N - op[1])
-            operators_XX.append(SparsePauliOp(pauli_str))
-
-        self.obs['Z'] = operators_Z
-        self.obs['XX'] = operators_XX
-        self.obs_idx['Z'] = obs_Z
-        self.obs_idx['XX'] = obs_XX
+    @staticmethod
+    def observables(N, obs_idx: dict):
+        log.info(f"Generating observables for Observable dictionary: {obs_idx}")
+        obs = {}
+        for obsstr in obs_idx:
+            obs[obsstr] = {}
+            for idx in obs_idx[obsstr]:
+                obs_gen = [(obsstr, idx, 1)]
+                obs[obsstr][tuple(idx)] = SparsePauliOp.from_sparse_list(obs_gen, num_qubits=N).to_matrix(sparse=True)
+        return obs
 
     # Second order trotter formula
     def evolution_step(self, qc, step=1, proportion=1.0, sample_step=1, h=None):
@@ -136,7 +123,7 @@ class IsingEvol():
         if step % sample_step == 0:
             qc.save_statevector(label=str(int(step / sample_step)))
 
-    def circuit(self, steps, samples=1, h=None):
+    def circuit(self, steps: int, samples=1, h=None):
         log.info(f"Building circuit for {steps} steps")
         sample_step = max(np.floor(steps / samples), 1)
         qc = QuantumCircuit(self.N)
@@ -157,7 +144,7 @@ class IsingEvol():
                                 sample_step=sample_step, h=h)
         return qc
 
-    def execute(self, steps=1, draw=False, samples=1, h=None):
+    def execute(self, steps: int = 1, draw: bool = False, samples: int = 1, h: float = None):
         qc = self.circuit(steps, samples=samples, h=h)
         if draw:
             print(qc)
@@ -167,20 +154,20 @@ class IsingEvol():
         log.info(f"Time taken for execution: {res.time_taken}")
         return res.data(0)
 
-    def compute_expectationvals(self, states):
+    @staticmethod
+    def compute_expectationvals(obs: dict, states: dict):
         log.info(f"Computing expectation values of observables")
-        expectations = {
-            'Z': [],
-            'XX': []
-        }
+        expectations = {}
 
-        for step in tqdm.tqdm(range(1, len(states) + 1), disable=not self.progress):
-            expectations['Z'].append([states[str(step)].expectation_value(op).real for op in self.obs['Z']])
-            expectations['XX'].append([states[str(step)].expectation_value(op).real for op in self.obs['XX']])
+        for obsstr in obs:
+            expectations[obsstr] = {}
+            for idx in obs[obsstr]:
+                expectations[obsstr][idx] = [np.real(np.conj(states[step]) @ obs[obsstr][idx] @ states[step]) for step
+                                             in range(len(states))]
 
         return expectations
 
-    def compute_kink_density(self, states, raw=False):
+    def compute_kink_density(self, states: dict, raw: bool = False):
         log.info(f"Computing expectation, variance and skewness values for number of kinks ({len(states)} states)")
         exp_kinks = []
         var_kinks = []
@@ -199,18 +186,13 @@ class IsingEvol():
         else:
             return np.mean(exp_kinks), np.mean(var_kinks), np.mean(skew_kinks)
 
-    def plot(self, expectations):
+    def plot(self, expectations: dict):
         log.info("Plotting observables...")
-        expZ = np.array(expectations['Z'])
-        expXX = np.array(expectations['XX'])
 
-        for i in range(len(self.obs_idx['Z'])):
-            plt.plot(expZ[:, i], label=r'$\langle \sigma^z_{{{}}} \rangle $'.format(self.obs_idx['Z'][i]))
+        for obsstr in expectations:
+            for idx in expectations[obsstr]:
+                plt.plot(expectations[obsstr][idx], label=r'$\langle \sigma^{{}}_{{{}}} \rangle $'.format(obsstr, idx))
 
-        for i in range(len(self.obs_idx['XX'])):
-            plt.plot(expXX[:, i],
-                     label=r'$\langle \sigma^X_{{{}}} \sigma^X_{{{}}} \rangle$'.format(self.obs_idx['XX'][i][0],
-                                                                                       self.obs_idx['XX'][i][1]))
         plt.xlabel('trotter steps')
         plt.legend()
         plt.savefig(

@@ -1,8 +1,6 @@
 import argparse
 from itertools import repeat
-
 import numpy as np
-
 from IsingEvolution import IsingEvol
 from multiprocessing import Pool
 import matplotlib.pyplot as plt
@@ -10,11 +8,11 @@ from scipy.optimize import curve_fit
 import pickle
 
 
-def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, gpu=False, periodic=False, samples=1,
-                  inverse=False, bias=None):
+def evolve_system(N, dt, h, J, trotter_steps, obs_Z, obs_XX, gpu=False, periodic=False, samples=1, inverse=False,
+                  bias=None):
     # Initialization
     ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, inverse=inverse, bias=bias, periodic=periodic)
-    ising_model_evolution.observables(obs_Z, obs_XX)
+    ising_model_evolution.observables([], obs_Z, obs_XX, [])
 
     # Execution
     states = ising_model_evolution.execute(draw=False, steps=trotter_steps, samples=samples)
@@ -28,7 +26,12 @@ def iteration_kinks(ising_model_evolution, steps, samples, h=None):
     return [nok_mean, nok_var, nok_skewness]
 
 
-def iteration_fidelity_simulation(N, h, J, dt, steps, samples, periodic, inverse, bias, gpu):
+def iteration_fidelity_groundstate_dot(ising_obj: IsingEvol, state: list, step: int, steps: int):
+    groundstate = ising_obj.groundState(step, steps)
+    return (np.abs(np.conj(state) @ groundstate) ** 2).flatten()
+
+
+def iteration_state_evolution(N, h, J, dt, steps, samples, periodic, inverse, bias, gpu):
     ising_model_evolution = IsingEvol(N, dt, h, J, gpu=gpu, periodic=periodic, inverse=inverse, bias=bias)
     ising_model_evolution.progress = False
     states = ising_model_evolution.execute(draw=False, steps=steps, samples=samples)
@@ -38,11 +41,6 @@ def iteration_fidelity_simulation(N, h, J, dt, steps, samples, periodic, inverse
         arr.append(states[str(step)].data)
 
     return np.array(arr)
-
-
-def iteration_fidelity_groundstate_dot(ising_obj, state, step, steps):
-    groundstate = ising_obj.groundState(step, steps)
-    return (np.abs(np.conj(state) @ groundstate) ** 2).flatten()
 
 
 def estimate_kinks_tau_dependency(N, dt, h, J, trotter_steps, gpu=False, samples=1, periodic=False, inverse=False,
@@ -100,7 +98,7 @@ def fidelity_measurement(N, h, J, steps, dt, gpu=False, periodic=False, inverse=
                  repeat(bias), repeat(gpu))
 
     with Pool() as pool:
-        states = np.array(pool.starmap(iteration_fidelity_simulation, params))
+        states = np.array(pool.starmap(iteration_state_evolution, params))
 
         groundstate_computer = IsingEvol(N, 0, h, J, gpu=gpu, periodic=periodic, inverse=inverse, bias=bias)
         # Swap axes from (5,100,-1) to (100,5,-1) where 5 are the number of dt's and 100 are the steps
@@ -113,6 +111,71 @@ def fidelity_measurement(N, h, J, steps, dt, gpu=False, periodic=False, inverse=
 
     with open("../data/" + filename, "wb") as f:
         pickle.dump(things_to_save, f)
+
+
+def correlator_measurements(N, h, J, steps, dt, gpu=False, periodic=False, inverse=False, bias=None):
+    params = zip(repeat(N), repeat(h), repeat(J), dt, repeat(steps), repeat(steps), repeat(periodic),
+                 repeat(inverse), repeat(bias), repeat(gpu))
+
+    obs_idx = {
+        'X': [[i] for i in range(N)],
+        'Z': [[i] for i in range(N)],
+        'XX': [[x, y] for x in range(N) for y in range(x + 1, N)],
+        'ZZ': [[x, y] for x in range(N) for y in range(x + 1, N)]
+    }
+
+    obs = IsingEvol.observables(N, obs_idx)
+
+    with Pool() as pool:
+        states = pool.starmap(iteration_state_evolution, params)
+        expectation_value = pool.starmap(IsingEvol.compute_expectationvals, zip(repeat(obs), states))
+
+    correlators = {}
+    for count, quench_run in enumerate(expectation_value):
+        correlator_iter = {}
+        for obsstr in obs_idx:
+            correlator_iter[obsstr] = quench_run[obsstr].copy()
+
+            if len(obsstr) == 2:
+                for idx in quench_run[obsstr]:
+                    correlator_iter[obsstr][idx] = np.array(quench_run[obsstr][idx]) - np.array(
+                        expectation_value[count][obsstr[0]][tuple([idx[0]])]) * np.array(
+                        expectation_value[count][obsstr[1]][tuple([idx[1]])])
+
+        correlators[str(dt[count] * steps)] = correlator_iter
+
+    filename = f'correlators_N{N}_J{J}_h{h}_steps{steps}_periodic{periodic}_inv{inverse}_bias{bias}'
+    things_to_save = [dt * steps, correlators, None, None]
+
+    with open("../data/" + filename, "wb") as f:
+        pickle.dump(things_to_save, f)
+
+
+def correlator_processing(N, correlators, periodic=False):
+    result = {}
+    for quench_time in correlators:
+        result[quench_time] = {}
+        for obsstr in correlators[quench_time]:
+            result[quench_time][obsstr] = correlators[quench_time][obsstr].copy()
+            distance_correlator = {}
+
+            if len(obsstr) == 2:
+                for idx in correlators[quench_time][obsstr]:
+                    distance = np.abs(idx[1] - idx[0])
+
+                    #  Indeces are mirrored at the 'largest' distance possible due to periodicity.
+                    #  e.g. N=10 largest distance possible is 5 as if 6 it is already 4 in the 'other' direction
+                    if periodic and distance > int(N / 2):
+                        distance = N - distance
+
+                    if not tuple([distance]) in distance_correlator:
+                        distance_correlator[tuple([distance])] = []
+
+                    distance_correlator[tuple([distance])].append(correlators[quench_time][obsstr][idx])
+
+                result[quench_time][obsstr] = distance_correlator
+
+    return result
 
 
 def plot_dependency(filename, tau, kdens_mean, kdens_var, kdens_skewness, plot_fit=False, a=0, e=0, g=0, xlabel=None,
@@ -169,6 +232,99 @@ def plot_fidelities(dt, steps, fidelities, filename):
         plt.legend()
         plt.tight_layout()
         plt.savefig("../figs/" + filename + ".png")
+
+
+def plot_correlators_time(correlators, filename):
+    figure_time, ax_time = plt.subplots(4, figsize=(8, 12), gridspec_kw={'height_ratios': [3, 2, 2, 2]})
+    N = len((list(correlators.values())[0])['Z'])
+    close_bound = 1
+
+    for tau in correlators:
+        data_ZZ = np.array(correlators[tau]['ZZ'][tuple([1])])
+        x = np.linspace(1 / data_ZZ.shape[1], 1, data_ZZ.shape[1])
+        y_ZZ = [np.mean(data_ZZ[:, i]) for i in range(data_ZZ.shape[1])]
+        ax_time[0].plot(x, y_ZZ, label=f"$\\tau_Q$={tau}")
+
+        data_X = []
+        for idx in correlators[tau]['X']:
+            data_X.append(correlators[tau]['X'][idx])
+        data_X = np.array(data_X)
+        y_X = [np.mean(data_X[:, i]) for i in range(data_X.shape[1])]
+        ax_time[3].plot(x, y_X, label=f"tau={tau}")
+
+        data_Z = np.array(correlators[tau]['Z'][tuple([close_bound])])
+        ax_time[2].plot(x, data_Z, label=f"tau={tau}")
+
+        data_Z = np.array(correlators[tau]['Z'][tuple([int(N / 2) - 1])])
+        ax_time[1].plot(x, data_Z, label=f"tau={tau}")
+
+    ax_time[0].set_ylabel('$C^{ZZ}_1$')
+    ax_time[0].legend()
+    ax_time[0].axhline(0, color="red", linestyle="--")
+    ax_time[0].grid()
+
+    ax_time[3].set_ylabel("$\left<\sigma^X\\right>$")
+    ax_time[3].axhline(0, color="red", linestyle="--")
+    ax_time[3].grid()
+    ax_time[3].legend()
+    ax_time[3].set_xlabel('$t/\\tau_Q$')
+
+    ax_time[2].set_ylabel(r"$\left<\sigma^Z_{{{}}}\right>$".format(close_bound))
+    ax_time[2].axhline(0, color="red", linestyle="--")
+    ax_time[2].grid()
+    ax_time[2].legend()
+
+    ax_time[1].set_ylabel(r"$\left<\sigma^Z_{{{}}}\right>$".format(int(N / 2) - 1))
+    ax_time[1].axhline(0, color="red", linestyle="--")
+    ax_time[1].grid()
+    ax_time[1].legend()
+
+    figure_time.tight_layout()
+    figure_time.savefig("../figs/" + filename + "_time.png")
+    figure_time.clf()
+
+
+def plot_correlators_distance(correlators, filename, critical=False):
+    figure_distance, ax_distance = plt.subplots(3, figsize=(8, 12), gridspec_kw={'height_ratios': [3, 2, 2]})
+
+    for tau in correlators:
+        distances_XX = []
+        distances_ZZ = []
+        y_ZZ = []
+        y_XX = []
+
+        for distance in correlators[tau]['ZZ']:
+            distances_ZZ.append(distance[0])
+            data_ZZ = np.array(correlators[tau]['ZZ'][distance])
+            y_ZZ.append(np.mean(data_ZZ[:, (int(data_ZZ.shape[1] / 2) - 1 if critical else 0)]))
+
+        for distance in correlators[tau]['XX']:
+            distances_XX.append(distance[0])
+            data_XX = np.array(correlators[tau]['XX'][distance])
+            y_XX.append(np.mean(data_XX[:, (int(data_XX.shape[1] / 2) - 1 if critical else 0)]))
+
+        ax_distance[0].plot(distances_ZZ, y_ZZ, label=f"$\\tau_Q$={tau}")
+        ax_distance[1].plot(distances_XX, y_XX, label=f"$\\tau_Q$={tau}")
+        ax_distance[2].plot(np.array(distances_XX) / np.sqrt(float(tau)), y_XX, label=f"$\\tau_Q$={tau}")
+
+    ax_distance[0].set_ylabel('$C^{ZZ}_R$')
+    ax_distance[0].legend()
+    ax_distance[0].set_yscale("log")
+    ax_distance[0].grid()
+
+    ax_distance[1].set_ylabel('$C^{XX}_R$')
+    ax_distance[1].grid()
+    ax_distance[1].legend()
+    ax_distance[1].set_xlabel('R')
+
+    ax_distance[2].set_ylabel('$C^{XX}_R$')
+    ax_distance[2].grid()
+    ax_distance[2].legend()
+    ax_distance[2].set_xlabel('$R/(\\tau_Q)^{1/2}$')
+
+    figure_distance.tight_layout()
+    figure_distance.savefig("../figs/" + filename + f"_critical{critical}.png")
+    figure_distance.clf()
 
 
 def kink_density_theory(tau, a, e, g):
@@ -233,6 +389,7 @@ if __name__ == '__main__':
     inverse = bool(args.inverse)
     bias = args.bias
 
+    # Kinks - quenchtime dependency
     if mode == 0:
         estimate_kinks_tau_dependency(N_, dt_, h_, J_, trotter_steps_, gpu=gpu_, samples=samples_,
                                       periodic=periodic, inverse=inverse, bias=bias)
@@ -242,15 +399,29 @@ if __name__ == '__main__':
         popt, pcov = fit_kinks(tau[data_start:data_end], kinks_mean[data_start:data_end])
         plot_dependency("../figs/" + filename, tau, kinks_mean, kinks_var, kinks_skewness, plot_fit=True, a=popt[0],
                         e=popt[1], g=popt[2], data_start=data_start, data_end=data_end)
+    # Evolution of system and measuring Correlators of a single run
     elif mode == 1:
         evolve_system(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_, gpu=bool(args.gpu), samples=samples_,
                       periodic=periodic, inverse=inverse, bias=bias)
+    # Kinks - Magnetic field dependency
     elif mode == 2:
         estimate_kinks_magnetic_dependency(N_, dt_, h_, J_, trotter_steps_, gpu=bool(args.gpu), samples=samples_,
                                            periodic=periodic, inverse=inverse)
+    # Fidelity in dependence of evolution step
     elif mode == 3:
         dt = np.array([0.00001, 0.0001, 0.001, 0.01, 0.1])
         fidelity_measurement(N_, h_, J_, trotter_steps_, dt, gpu_, periodic, inverse, bias)
         filename = f'fidelity_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}'
         steps, fidelities, _sig = load_file("../data/" + filename)
         plot_fidelities(dt, steps, fidelities, filename)
+    # Evolution of system and measuring Correlators for several runs with different quench times
+    elif mode == 4:
+        dt = np.array([0.5, 1, 2, 4, 8, 16, 32]) / trotter_steps_
+        correlator_measurements(N_, h_, J_, trotter_steps_, dt, gpu=gpu_, periodic=periodic, inverse=inverse,
+                                bias=bias)
+        filename = f"correlators_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}"
+        tau, correlators, _, _ = load_file("../data/" + filename)
+        processed_correlators = correlator_processing(N_, correlators, periodic=periodic)
+        plot_correlators_time(processed_correlators, filename)
+        plot_correlators_distance(processed_correlators, filename, critical=True)
+        plot_correlators_distance(processed_correlators, filename, critical=False)

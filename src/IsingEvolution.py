@@ -4,6 +4,7 @@ import numpy as np
 import logging as log
 from qiskit import QuantumCircuit
 from qiskit.quantum_info.operators import SparsePauliOp
+from qiskit.quantum_info import partial_trace, Statevector
 from qiskit_aer import Aer
 from scipy.sparse.linalg import eigsh
 from scipy.sparse import identity
@@ -162,10 +163,23 @@ class IsingEvol():
         for obsstr in obs:
             expectations[obsstr] = {}
             for idx in obs[obsstr]:
-                expectations[obsstr][idx] = [np.real(np.conj(states[step]) @ obs[obsstr][idx] @ states[step]) for step
-                                             in range(len(states))]
+                expectations[obsstr][idx] = np.array(
+                    [np.real(np.conj(states[step]) @ obs[obsstr][idx] @ states[step]) for step in range(len(states))])
 
         return expectations
+
+    @staticmethod
+    def compute_partial_trace(N: int, data: list[list], keepsub: list):
+        tr_sub_sys = list(range(N))
+        for sys in keepsub:
+            tr_sub_sys.remove(sys)
+
+        res = []
+        for state in data:
+            vec = Statevector(state)
+            res.append(partial_trace(vec, tr_sub_sys).data)
+
+        return res
 
     def compute_kink_density(self, states: dict, raw: bool = False):
         log.info(f"Computing expectation, variance and skewness values for number of kinks ({len(states)} states)")
@@ -197,3 +211,27 @@ class IsingEvol():
         plt.legend()
         plt.savefig(
             f'../figs/quench_N{self.N}_lin{self.linear_increase}_J{self.J}_h{self.h}_dt{self.dt}_periodic{self.periodic}.png')
+
+# result = []
+#
+# for i in range(2 - 1):
+#     result.append(('XX', [i, i + 1], -1))
+#
+# matr = np.real(SparsePauliOp.from_sparse_list(result, num_qubits=2).to_matrix(sparse=True))
+# matr2 = SparsePauliOp.from_sparse_list(result, num_qubits=2).to_matrix()
+# eigval1, eigvec1 = eigsh(matr, which="SA", k=1)
+# eigval4, eigvec4 = eigsh(matr, which="SA", k=1)
+# eigval5, eigvec5 = eigsh(matr, which="SA", k=1)
+# eigval2, eigvec2 = eigsh(matr, which="SA", k=2)
+# eigval3, eigvec3 = eigh(matr2)
+# print(np.abs(np.conj(eigvec1.flatten()) @ eigvec2[:, 0]) ** 2)
+# print(np.abs(np.conj(eigvec1.flatten()) @ eigvec2[:, 1]) ** 2)
+# print(np.abs(np.conj(eigvec1.flatten()) @ eigvec3[:, 0]) ** 2)
+# print(np.abs(np.conj(eigvec2[:, 0].flatten()) @ eigvec3[:, 0]) ** 2)
+# print(np.abs(np.conj(eigvec2[:, 0].flatten()) @ eigvec2[:, 0]) ** 2)
+# print(np.abs(np.conj(eigvec2[:, 1].flatten()) @ eigvec2[:, 1]) ** 2)
+# print(np.abs(np.conj(eigvec2[:, 0].flatten()) @ eigvec2[:, 1]) ** 2)
+# print(np.abs(np.conj(eigvec3[:, 0].flatten()) @ eigvec3[:, 1]) ** 2)
+# print(np.abs(np.conj(eigvec1.flatten()) @ (eigvec2[:, 0] + eigvec2[:, 1]) / np.sqrt(2)) ** 2)
+# # print(np.abs(np.conj((eigvec2[:, 0] + eigvec2[:, 1]) / np.sqrt(2)) @ (eigvec2[:, 0] + eigvec2[:, 1]) / np.sqrt(2)) ** 2)
+# print(np.abs(np.conj((eigvec3[:, 0] + eigvec3[:, 1]) / np.sqrt(2)) @ (eigvec2[:, 0] + eigvec2[:, 1]) / np.sqrt(2)) ** 2)

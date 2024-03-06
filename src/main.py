@@ -4,8 +4,8 @@ from measurements import kinks_time_measurements, observable_measurements, kinks
     fidelity_measurements, iteration_state_evolution_parallel, correlator_measurements, entropy_measurements
 from data_processing import correlator_processing, entropies_processing
 from filemanager import load_file
-from plotting import plot_dependency, plot_fidelities, plot_correlators_time, plot_correlators_distance, \
-    plot_von_neumann_time, plot_von_neumann_distance
+from plotting import plot_kinks, plot_fidelities, plot_correlators_time, plot_correlators_distance, \
+    plot_entropies_time, plot_entropies_distance
 from theory import fit_kinks
 
 if __name__ == '__main__':
@@ -60,10 +60,10 @@ if __name__ == '__main__':
                                 periodic=periodic, inverse=inverse, bias=bias)
 
         filename = f"kinks_N{N_}_J{J_}_h{h_}_dt{dt_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}"
-        tau, kinks_mean, kinks_var, kinks_skewness = np.array(load_file("../data/" + filename))
+        tau, kinks_mean, kinks_var, kinks_skewness = np.array(load_file("../data/kinks/" + filename))
         popt, pcov = fit_kinks(tau[data_start:data_end], kinks_mean[data_start:data_end])
-        plot_dependency("../figs/" + filename, tau, kinks_mean, kinks_var, kinks_skewness, plot_fit=True, a=popt[0],
-                        e=popt[1], g=popt[2], data_start=data_start, data_end=data_end)
+        plot_kinks(filename, tau, kinks_mean, kinks_var, kinks_skewness, plot_fit=True, a=popt[0], e=popt[1], g=popt[2],
+                   data_start=data_start, data_end=data_end)
     # Evolution of system and measuring Correlators of a single run
     elif mode == 1:
         observable_measurements(N_, dt_, h_, J_, trotter_steps_, obs_Z_, obs_XX_, gpu=bool(args.gpu), samples=samples_,
@@ -77,7 +77,7 @@ if __name__ == '__main__':
         dt = np.array([0.00001, 0.0001, 0.001, 0.01, 0.1])
         fidelity_measurements(N_, h_, J_, trotter_steps_, dt, gpu_, periodic, inverse, bias)
         filename = f'fidelity_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}'
-        steps, fidelities, _sig = load_file("../data/" + filename)
+        steps, fidelities, _sig = load_file("../data/fidelities/" + filename)
         plot_fidelities(dt, steps, fidelities, filename)
     # Evolution of system and measuring Correlators for several runs with different quench times
     elif mode == 4:
@@ -86,11 +86,12 @@ if __name__ == '__main__':
         iteration_state_evolution_parallel(N_, h_, J_, trotter_steps_, dt, gpu=gpu_, periodic=periodic, inverse=inverse,
                                            bias=bias)
         filename = f'states_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
-        _, quench_runs, _, _ = load_file("../data/" + filename)
+        _, quench_runs, _, _ = load_file("../data/states/" + filename)
 
-        correlator_measurements(N_, quench_runs, filename)
         filename = f"correlators_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}"
-        tau, correlators, _, _ = load_file("../data/" + filename)
+        correlator_measurements(N_, quench_runs, filename)
+        tau, correlators, _, _ = load_file("../data/correlators/" + filename)
+
         processed_correlators = correlator_processing(N_, correlators, periodic=periodic)
         plot_correlators_time(processed_correlators, filename)
         plot_correlators_distance(processed_correlators, filename, critical=True)
@@ -100,12 +101,12 @@ if __name__ == '__main__':
         iteration_state_evolution_parallel(N_, h_, J_, trotter_steps_, dt, gpu=gpu_, periodic=periodic, inverse=inverse,
                                            bias=bias)
         filename = f'states_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
-        _, quench_runs, _, _ = load_file("../data/" + filename)
+        _, quench_runs, _, _ = load_file("../data/states/" + filename)
 
-        entropy_measurements(N_, quench_runs, filename)
         filename = f'entropies_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
-        _, entropies, _, _ = load_file("../data/" + filename)
+        entropy_measurements(N_, quench_runs, filename)
+        _, entropies, _, _ = load_file("../data/entropies/" + filename)
 
         distance_entropies = entropies_processing(N_, entropies['2s'], periodic=periodic)
-        plot_von_neumann_time(entropies['3s'], filename)
-        plot_von_neumann_distance(distance_entropies, filename)
+        plot_entropies_time(entropies['3s'], filename)
+        plot_entropies_distance(distance_entropies, filename)

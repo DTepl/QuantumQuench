@@ -4,8 +4,8 @@ import numpy as np
 from src.theory import kink_density_theory
 
 
-def plot_dependency(filename, tau, kdens_mean, kdens_var, kdens_skewness, plot_fit=False, a=0, e=0, g=0, xlabel=None,
-                    data_start=0, data_end=-1):
+def plot_kinks(filename, tau, kdens_mean, kdens_var, kdens_skewness, plot_fit=False, a=0, e=0, g=0, xlabel=None,
+               data_start=0, data_end=-1):
     plt.plot(tau, kdens_mean)
     print(f"exponent: {e}")
     print(f"parallel magnetic: {(g / 6.89) ** (15 / 16)}")
@@ -34,7 +34,7 @@ def plot_dependency(filename, tau, kdens_mean, kdens_var, kdens_skewness, plot_f
         ax[1].legend()
 
         plt.tight_layout()
-        plt.savefig("../figs/" + filename + ".png")
+        plt.savefig("../figs/kinks/" + filename + ".png")
     else:
         plt.plot(tau, kdens_mean, label="$\\left<N\\right>$")
         plt.plot(tau, kdens_var, label="$\\left<N^2\\right> - \\left<N\\right>^2$")
@@ -46,7 +46,7 @@ def plot_dependency(filename, tau, kdens_mean, kdens_var, kdens_skewness, plot_f
         plt.legend()
         plt.grid()
         plt.tight_layout()
-        plt.savefig("../figs/" + filename + ".png")
+        plt.savefig("../figs/kinks/" + filename + ".png")
 
 
 def plot_fidelities(dt, steps, fidelities, filename):
@@ -57,7 +57,7 @@ def plot_fidelities(dt, steps, fidelities, filename):
         plt.ylabel('Fidelity')
         plt.legend()
         plt.tight_layout()
-        plt.savefig("../figs/" + filename + ".png")
+        plt.savefig("../figs/fidelities/" + filename + ".png")
 
 
 def plot_correlators_time(correlators, filename):
@@ -106,7 +106,7 @@ def plot_correlators_time(correlators, filename):
     ax_time[1].legend()
 
     figure_time.tight_layout()
-    figure_time.savefig("../figs/" + filename + "_time.png")
+    figure_time.savefig("../figs/correlators/" + filename + "_time.png")
     figure_time.clf()
 
 
@@ -149,11 +149,11 @@ def plot_correlators_distance(correlators, filename, critical=False):
     ax_distance[2].set_xlabel('$R/(\\tau_Q)^{1/2}$')
 
     figure_distance.tight_layout()
-    figure_distance.savefig("../figs/" + filename + f"_critical{critical}.png")
+    figure_distance.savefig("../figs/correlators/" + filename + f"_critical{critical}.png")
     figure_distance.clf()
 
 
-def plot_von_neumann_time(entropies_set: dict, filename: str):
+def plot_entropies_time(entropies_set: dict, filename: str):
     figure_time, ax_time = plt.subplots(len(list(entropies_set.values())[0]), figsize=(8, 12))
 
     for tau in entropies_set:
@@ -168,11 +168,11 @@ def plot_von_neumann_time(entropies_set: dict, filename: str):
 
     ax_time[-1].set_xlabel('$t/\\tau_Q$')
     figure_time.tight_layout()
-    figure_time.savefig("../figs/" + filename + "_time.png")
+    figure_time.savefig("../figs/entropies/" + filename + "_time.png")
     figure_time.clf()
 
 
-def plot_von_neumann_distance(entropies_set, filename):
+def plot_entropies_distance(entropies_set, filename):
     figure_distance, ax_distance = plt.subplots(2, 2, figsize=(10, 8))
 
     for tau in entropies_set:
@@ -217,5 +217,5 @@ def plot_von_neumann_distance(entropies_set, filename):
     ax_distance[1, 1].set_xlabel('$R/(\\tau_Q)^{1/2}$')
 
     figure_distance.tight_layout()
-    figure_distance.savefig("../figs/" + filename + "_dist.png")
+    figure_distance.savefig("../figs/entropies/" + filename + "_dist.png")
     figure_distance.clf()

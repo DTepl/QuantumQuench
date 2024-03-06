@@ -2,7 +2,7 @@ from itertools import repeat
 import numpy as np
 from IsingEvolution import IsingEvol
 from multiprocessing import Pool
-from plotting import plot_dependency
+from plotting import plot_kinks
 from filemanager import save_file
 
 
@@ -52,7 +52,7 @@ def iteration_state_evolution_parallel(N, h, J, steps, dt, gpu=False, periodic=F
     for count, quench in enumerate(states):
         result[str(dt[count] * steps)] = quench
 
-    filename = f'states_N{N}_J{J}_h{h}_steps{steps}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
+    filename = f'states/states_N{N}_J{J}_h{h}_steps{steps}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
     things_to_save = [dt, result, None, None]
     save_file(filename, things_to_save)
 
@@ -76,7 +76,7 @@ def kinks_time_measurements(N, dt, h, J, trotter_steps, gpu=False, samples=1, pe
         nok = np.array(
             pool.starmap(iteration_kinks, zip(repeat(ising_model_evolution), steps, repeat(samples), repeat(None))))
 
-    filename = f'kinks_N{N}_J{J}_h{h}_dt{dt}_steps{trotter_steps}_periodic{periodic}_inv{inverse}_bias{bias}'
+    filename = f'kinks/kinks_N{N}_J{J}_h{h}_dt{dt}_steps{trotter_steps}_periodic{periodic}_inv{inverse}_bias{bias}'
     kdens_exp = nok[:, 0]
     kdens_var = nok[:, 1]
     kdens_skew = nok[:, 2]
@@ -104,7 +104,7 @@ def kinks_magneticfield_measurements(N, dt, h, J, trotter_steps, gpu=False, samp
     kdens_sig = nok[:, 1]
 
     filename = f'kinks_N{N}_J{J}_h_max{h}_dt{dt}_steps{trotter_steps}_periodic{periodic}_inv{inverse}_bias{bias}'
-    plot_dependency(filename, np.array(h_array), np.array(kdens_mean), np.array(kdens_sig), xlabel="Magnetic field h")
+    plot_kinks(filename, np.array(h_array), np.array(kdens_mean), np.array(kdens_sig), xlabel="Magnetic field h")
     # plot_dependency(filename, np.array(h_array), np.array(nok), np.array(trotter_steps * [0]),
     #                 xlabel="Magnetic field h")
     things_to_save = [h_array, np.array(nok), np.array(trotter_steps * [0])]
@@ -124,7 +124,7 @@ def fidelity_measurements(N, h, J, steps, dt, gpu=False, periodic=False, inverse
                                   zip(repeat(groundstate_computer), np.swapaxes(states, 0, 1), range(1, steps + 1),
                                       repeat(steps)))
 
-    filename = f'fidelity_N{N}_J{J}_h{h}_steps{steps}_periodic{periodic}_inv{inverse}_bias{bias}'
+    filename = f'fidelities/fidelity_N{N}_J{J}_h{h}_steps{steps}_periodic{periodic}_inv{inverse}_bias{bias}'
     things_to_save = [steps, np.swapaxes(fidelities, 0, 1), 0]  # swap back for easier plotting
     save_file(filename, things_to_save)
 
@@ -157,9 +157,8 @@ def correlator_measurements(N: int, quench_runs: dict, filename: str):
 
         correlators[keys[count]] = correlator_iter
 
-    filename = f'correlators_{filename.split("_", 1)[1]}'
     things_to_save = [keys, correlators, None, None]
-    save_file(filename, things_to_save)
+    save_file('correlators/' + filename, things_to_save)
 
 
 def entropy_measurements(N: int, quench_runs: dict[list], filename: str):
@@ -185,6 +184,5 @@ def entropy_measurements(N: int, quench_runs: dict[list], filename: str):
         entropies_set['2s'][quench_time] = entropies_2s
         entropies_set['3s'][quench_time] = entropies_3s
 
-    filename = f'entropies_{filename.split("_", 1)[1]}'
     things_to_save = [list(quench_runs.keys()), entropies_set, None, None]
-    save_file(filename, things_to_save)
+    save_file('entropies/' + filename, things_to_save)

@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src.theory import kink_density_theory
+from theory import kink_density_theory, fit_entropy, entropy_3s_theory, derivation
 
 
 def plot_kinks(filename, tau, kdens_mean, kdens_var, kdens_skewness, plot_fit=False, a=0, e=0, g=0, xlabel=None,
@@ -153,8 +153,11 @@ def plot_correlators_distance(correlators, filename, critical=False):
     figure_distance.clf()
 
 
-def plot_entropies_time(entropies_set: dict, filename: str):
+def plot_entropies_time(entropies_set: dict, filename: str, fitting: bool = False):
     figure_time, ax_time = plt.subplots(len(list(entropies_set.values())[0]), figsize=(8, 12))
+
+    if fitting:
+        figure_fit, ax_fit = plt.subplots(3, figsize=(8, 12))
 
     for tau in entropies_set:
         for count, idx in enumerate(entropies_set[tau]):
@@ -166,10 +169,38 @@ def plot_entropies_time(entropies_set: dict, filename: str):
             ax_time[count].legend()
             ax_time[count].grid()
 
+            if fitting and count == 0:
+                popt, pcov = fit_entropy(x, data)
+                fit = entropy_3s_theory(x, popt[0], popt[1], popt[2], popt[3])
+
+                color = next(ax_fit[0]._get_lines.prop_cycler)['color']
+                ax_fit[0].plot(x, data, color=color)
+                ax_fit[0].plot(x, fit, label=f"tau={tau}", linestyle="--", color=color)
+                ax_fit[0].set_ylabel(r'$S_{{{}}}$'.format(idx))
+
+                ax_fit[1].plot(x, data - fit, label=f"tau={tau}")
+                ax_fit[1].set_ylabel('Residuals')
+
+                ax_fit[2].plot(x, derivation(derivation(fit)), label=f"tau={tau}")
+                ax_fit[2].set_ylabel('$\\frac{\partial^2}{\partial x^2}$')
+
     ax_time[-1].set_xlabel('$t/\\tau_Q$')
     figure_time.tight_layout()
     figure_time.savefig("../figs/entropies/" + filename + "_time.png")
     figure_time.clf()
+
+    ax_fit[-1].set_xlabel('$t/\\tau_Q$')
+    ax_fit[0].legend()
+    ax_fit[0].grid()
+    ax_fit[1].legend()
+    ax_fit[1].grid()
+    ax_fit[2].legend()
+    ax_fit[2].axhline(y=0, color='red', linestyle='--')
+    ax_fit[2].axvline(x=0.5, color='red', linestyle='--')
+    ax_fit[2].grid()
+    figure_fit.tight_layout()
+    figure_fit.savefig("../figs/entropies/" + filename + "_time_fit.png")
+    figure_fit.clf()
 
 
 def plot_entropies_distance(entropies_set, filename):

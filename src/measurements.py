@@ -60,7 +60,7 @@ def iteration_state_evolution_parallel(N, h, J, steps, dt, gpu=False, periodic=F
 def iteration_entropy(partial_trace_set: list[np.ndarray]):
     res = []
     for partial_trace in partial_trace_set:
-        res.append(-np.sum(np.real(np.trace(partial_trace * np.log2(partial_trace)))))
+        res.append(-np.real(np.trace(partial_trace * np.log2(partial_trace))))
 
     return res
 

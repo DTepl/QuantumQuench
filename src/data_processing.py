@@ -1,15 +1,25 @@
 import numpy as np
 
 
-def pair_to_distance(N: int, pair_dict: dict, periodic=False):
+def pair_to_distance(N: tuple[int, int], pair_dict: dict, periodic=False, dim=1):
     distance_dict = {}
+    if isinstance(N, int):
+        N = (N, 0)
+
     for idx in pair_dict:
-        distance = np.abs(idx[1] - idx[0])
+        y1, x1 = divmod(idx[0], N[0])
+        y2, x2 = divmod(idx[1], N[0])
+
+        dx = np.abs(x2 - x1)
+        dy = np.abs(y2 - y1)
+        distance = np.sqrt(dx ** 2 + dy ** 2)
 
         #  Indeces are mirrored at the 'largest' distance possible due to periodicity.
         #  e.g. N=10 largest distance possible is 5 as if 6 it is already 4 in the 'other' direction
-        if periodic and distance > int(N / 2):
-            distance = N - distance
+        if periodic:
+            dx_wrap = min(dx, N[0] - dx)
+            dy_wrap = min(dy, (N[1] if N[1] else 0) - dy)
+            distance = np.sqrt(dx_wrap ** 2 + dy_wrap ** 2)
 
         if not tuple([distance]) in distance_dict:
             distance_dict[tuple([distance])] = []

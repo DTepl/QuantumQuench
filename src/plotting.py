@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
 
 from theory import kink_density_theory, fit_entropy, entropy_3s_theory, derivation
 
@@ -147,6 +148,63 @@ def plot_correlators_distance(correlators, filename, critical=False):
     ax_distance[2].grid()
     ax_distance[2].legend()
     ax_distance[2].set_xlabel('$R/(\\tau_Q)^{1/2}$')
+
+    figure_distance.tight_layout()
+    figure_distance.savefig("../figs/correlators/" + filename + f"_critical{critical}.png")
+    figure_distance.clf()
+
+
+def plot_correlators_distance_2D(correlators, moments, filename, critical=False):
+    figure_distance, ax_distance = plt.subplots(2, figsize=(8, 12))
+    twoDelta = 1 + 0.036298
+
+    markers = ['o', 'v', '^']
+    color = ['red', 'blue', 'green', 'yellow', 'pink']
+    colormap = {}
+
+    legend_elements = []
+
+    for count_corr, (L, _L) in enumerate(correlators):
+        legend_elements.append(Line2D([0], [0], color='black', marker=markers[count_corr], label=f'L: {L}'))
+        for tau in correlators[(L, _L)]:
+            ## Divided by two because in the paper the quench is from -tau to tau
+            epsilon = (float(tau) / 2) ** 0.36
+            t_hat = (float(tau) / 2) ** 0.36
+            epsilon_h = round(epsilon / L, 3)
+
+            for moment in moments:
+                percentage = 0.5 + float(moment * t_hat * 2 / float(tau))
+                distances_XX = []
+                y_XX = []
+
+                if not epsilon_h in colormap:
+                    colormap[epsilon_h] = color[0]
+                    legend_elements.append(Line2D([0], [0], color=color[0], label=f'$\\epsilon/L$: {epsilon_h}'))
+                    color.remove(color[0])
+
+                for distance in correlators[(L, _L)][tau]['XX']:
+                    distances_XX.append(distance[0])
+                    data_XX = np.array(correlators[(L, _L)][tau]['XX'][distance])
+                    y_XX.append(np.mean(data_XX[:, int(percentage * data_XX.shape[1])]))
+
+                ax_distance[0].scatter(distances_XX, y_XX,
+                                       # label=f"$t/t_h$={round(moment, 2)}",
+                                       marker=markers[count_corr], color=colormap[epsilon_h])
+                ax_distance[1].scatter(np.array(distances_XX) / epsilon, np.array(y_XX) * epsilon ** twoDelta,
+                                       # label=f"$t/t_h$={round(moment, 2)}",
+                                       marker=markers[count_corr], color=colormap[epsilon_h])
+
+    ax_distance[0].set_ylabel('$C_{XX}(R)$')
+    ax_distance[0].grid()
+    ax_distance[0].legend(handles=legend_elements)
+    ax_distance[0].set_xlabel('R')
+    ax_distance[0].set_yscale("log")
+
+    ax_distance[1].set_ylabel('$\\epsilon^{2\\Delta}C^{XX}_R$')
+    ax_distance[1].grid()
+    ax_distance[1].legend(handles=legend_elements)
+    ax_distance[1].set_xlabel('$R/\\epsilon$')
+    ax_distance[1].set_yscale("log")
 
     figure_distance.tight_layout()
     figure_distance.savefig("../figs/correlators/" + filename + f"_critical{critical}.png")

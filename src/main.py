@@ -5,12 +5,12 @@ from measurements import kinks_time_measurements, observable_measurements, kinks
 from data_processing import correlator_processing, entropies_processing
 from filemanager import load_file
 from plotting import plot_kinks, plot_fidelities, plot_correlators_time, plot_correlators_distance, \
-    plot_entropies_time, plot_entropies_distance
+    plot_entropies_time, plot_entropies_distance, plot_correlators_distance_2D
 from theory import fit_kinks
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("QuantumQuench")
-    parser.add_argument("N", help="Number of Qubits", type=int)
+    parser.add_argument("N", help="Number of Qubits", type=int, nargs='+')
     parser.add_argument("trotter_steps", help="The number of trotter steps", type=int)
 
     parser.add_argument("-dt", help="Duration of a trotter imestep", default=0.1, type=float)
@@ -54,6 +54,9 @@ if __name__ == '__main__':
     inverse = bool(args.inverse)
     bias = args.bias
 
+    if mode != 6:
+        N_ = N_[0]
+
     # Kinks - quenchtime dependency
     if mode == 0:
         kinks_time_measurements(N_, dt_, h_, J_, trotter_steps_, gpu=gpu_, samples=samples_,
@@ -84,12 +87,18 @@ if __name__ == '__main__':
         dt = np.array([0.5, 1, 2, 4, 8, 16, 32]) / trotter_steps_
 
         iteration_state_evolution_parallel(N_, h_, J_, trotter_steps_, dt, gpu=gpu_, periodic=periodic, inverse=inverse,
-                                           bias=bias)
-        filename = f'states_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
+                                           bias=bias, dim=1)
+        filename = f'1D_states_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
         _, quench_runs, _, _ = load_file("../data/states/" + filename)
 
         filename = f"correlators_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}"
-        correlator_measurements(N_, quench_runs, filename)
+        obs_idx = {
+            'X': [[i] for i in range(N_)],
+            'Z': [[i] for i in range(N_)],
+            'XX': [[x, y] for x in range(N_) for y in range(x + 1, N_)],
+            'ZZ': [[x, y] for x in range(N_) for y in range(x + 1, N_)]
+        }
+        correlator_measurements(N_, obs_idx, quench_runs, filename)
         tau, correlators, _, _ = load_file("../data/correlators/" + filename)
 
         processed_correlators = correlator_processing(N_, correlators, periodic=periodic)
@@ -99,8 +108,8 @@ if __name__ == '__main__':
     elif mode == 5:
         dt = np.array([0.5, 1, 2, 4, 8, 16, 32]) / trotter_steps_
         iteration_state_evolution_parallel(N_, h_, J_, trotter_steps_, dt, gpu=gpu_, periodic=periodic, inverse=inverse,
-                                           bias=bias)
-        filename = f'states_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
+                                           bias=bias, dim=1)
+        filename = f'1D_states_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
         _, quench_runs, _, _ = load_file("../data/states/" + filename)
 
         filename = f'entropies_N{N_}_J{J_}_h{h_}_steps{trotter_steps_}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
@@ -108,5 +117,36 @@ if __name__ == '__main__':
         _, entropies, _, _ = load_file("../data/entropies/" + filename)
 
         distance_entropies = entropies_processing(N_, entropies['2s'], periodic=periodic)
-        plot_entropies_time(entropies['3s'], filename)
+        plot_entropies_time(entropies['3s'], filename, fitting=True)
         plot_entropies_distance(distance_entropies, filename)
+    elif mode == 6:
+        # dt = np.array([0.5, 1, 2, 4, 8, 16, 32]) / trotter_steps_
+        L = np.array([3, 4])
+        epsdivl = np.array([0.2, 0.225, 0.255, 0.275, 0.3])
+        processed_correlators = {}
+
+        for i in L:
+            N = (i, i)
+            dt = (epsdivl * i) ** (1 / 0.36) * 2 / trotter_steps_
+            iteration_state_evolution_parallel(N, h_, J_, trotter_steps_, dt, gpu=gpu_, periodic=periodic,
+                                               inverse=inverse, bias=bias, dim=2)
+            filename = f'2D_states_N{N}_J{J_}_h{h_}_steps{trotter_steps_}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
+            _, quench_runs, _, _ = load_file("../data/states/" + filename)
+            filename = f"2D_correlators_N{N}_J{J_}_h{h_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}"
+
+            ## Gives already the right index e.g. 7/2 = 3.5 with integer conversion => 3. Lowest index 0 and highest 6, in the middle
+            x_centr = int(N[0] / 2)
+            y_centr = int(N[1] / 2)
+            obs_idx = {
+                'X': [[i] for i in range(N[0] * N[1])],
+                ## Goes through row of central spin
+                'XX': [[N[0] * y_centr + x_centr, N[0] * y_centr + x] for x in range(N[0]) if x != x_centr] +
+                      ## Goes through column of central spin
+                      [[N[0] * y_centr + x_centr, N[0] * y + x_centr] for y in range(N[1]) if y != y_centr]
+            }
+            correlator_measurements(N[0] * N[1], obs_idx, quench_runs, filename)
+            tau, correlators, _, _ = load_file("../data/correlators/" + filename)
+
+            processed_correlators[N] = correlator_processing(N, correlators, periodic=periodic)
+
+        plot_correlators_distance_2D(processed_correlators, [0, 0.1, 0.2], filename, critical=False)

@@ -23,7 +23,7 @@ def compute_expectationvals(obs: dict, states: dict):
         expectations[obsstr] = {}
         for idx in obs[obsstr]:
             expectations[obsstr][idx] = np.array(
-                [np.real(np.conj(states[step]) @ obs[obsstr][idx] @ states[step]) for step in range(len(states))])
+                [np.real(np.conj(state) @ obs[obsstr][idx] @ state) for state in states])
 
     return expectations
 

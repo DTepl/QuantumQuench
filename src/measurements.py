@@ -46,7 +46,8 @@ def iteration_state_evolution(N, h, J, dt, steps, samples, periodic, inverse, bi
     return np.array(arr)
 
 
-def iteration_state_evolution_parallel(N, h, J, steps, dt, gpu=False, periodic=False, inverse=False, bias=None, dim=1):
+def iteration_state_evolution_parallel(N, h, J, steps, dt, gpu=False, periodic=False, inverse=False, bias=None, dim=1,
+                                       save=True):
     params = zip(repeat(N), repeat(h), repeat(J), dt, repeat(steps), repeat(steps), repeat(periodic),
                  repeat(inverse), repeat(bias), repeat(gpu), repeat(dim))
     with Pool() as pool:
@@ -56,9 +57,12 @@ def iteration_state_evolution_parallel(N, h, J, steps, dt, gpu=False, periodic=F
     for count, quench in enumerate(states):
         result[str(dt[count] * steps)] = quench
 
-    filename = f'states/{dim}D_states_N{N}_J{J}_h{h}_steps{steps}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
-    things_to_save = [dt, result, None, None]
-    save_file(filename, things_to_save)
+    if save:
+        filename = f'states/{dim}D_states_N{N}_J{J}_h{h}_steps{steps}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
+        things_to_save = [dt, result, None, None]
+        save_file(filename, things_to_save)
+
+    return result
 
 
 def iteration_entropy(partial_trace_set: list[np.ndarray]):
@@ -148,8 +152,8 @@ def correlator_measurements(N: int, obs_idx: dict, quench_runs: dict, filename: 
 
             if len(obsstr) == 2:
                 for idx in quench_run[obsstr]:
-                    correlator_iter[obsstr][idx] = quench_run[obsstr][idx] - expectation_value[count][obsstr[0]][
-                        tuple([idx[0]])] * expectation_value[count][obsstr[1]][tuple([idx[1]])]
+                    correlator_iter[obsstr][idx] = quench_run[obsstr][idx] - quench_run[obsstr[0]][tuple([idx[0]])] * \
+                                                   quench_run[obsstr[1]][tuple([idx[1]])]
 
         correlators[keys[count]] = correlator_iter
 

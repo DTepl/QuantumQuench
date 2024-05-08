@@ -126,10 +126,11 @@ if __name__ == '__main__':
         for i in N_:
             N = (i, i)
             dt = (epsdivl * i) ** (1 / 0.36) * 2 / trotter_steps_
-            iteration_state_evolution_parallel(N, h_, J_, trotter_steps_, dt, gpu=gpu_, periodic=periodic,
-                                               inverse=inverse, bias=bias, dim=2)
-            filename = f'2D_states_N{N}_J{J_}_h{h_}_steps{trotter_steps_}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
-            _, quench_runs, _, _ = load_file("../data/states/" + filename)
+            # Add loading condition!
+            quench_runs = iteration_state_evolution_parallel(N, h_, J_, trotter_steps_, dt, gpu=gpu_, periodic=periodic,
+                                               inverse=inverse, bias=bias, dim=2, save=False)
+            # filename = f'2D_states_N{N}_J{J_}_h{h_}_steps{trotter_steps_}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
+            # _, quench_runs, _, _ = load_file("../data/states/" + filename)
             filename = f"2D_correlators_N{N}_J{J_}_h{h_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}"
 
             ## Gives already the right index e.g. 7/2 = 3.5 with integer conversion => 3. Lowest index 0 and highest 6, in the middle

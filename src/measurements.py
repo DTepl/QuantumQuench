@@ -4,8 +4,8 @@ from IsingEvolution1D import IsingEvol1D
 from multiprocessing import Pool
 from plotting import plot_kinks
 from filemanager import save_file
-from src.IsingEvolution2D import IsingEvol2D
-from src.linalg import observables, compute_expectationvals, compute_partial_trace
+from IsingEvolution2D import IsingEvol2D
+from linalg import observables, compute_expectationvals, compute_partial_trace
 
 
 def observable_measurements(N, dt, h, J, trotter_steps, obs_Z, obs_XX, gpu=False, periodic=False, samples=1,

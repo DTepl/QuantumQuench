@@ -120,12 +120,10 @@ if __name__ == '__main__':
         plot_entropies_time(entropies['3s'], filename, fitting=True)
         plot_entropies_distance(distance_entropies, filename)
     elif mode == 6:
-        # dt = np.array([0.5, 1, 2, 4, 8, 16, 32]) / trotter_steps_
-        L = np.array([3, 4])
         epsdivl = np.array([0.2, 0.225, 0.255, 0.275, 0.3])
         processed_correlators = {}
 
-        for i in L:
+        for i in N_:
             N = (i, i)
             dt = (epsdivl * i) ** (1 / 0.36) * 2 / trotter_steps_
             iteration_state_evolution_parallel(N, h_, J_, trotter_steps_, dt, gpu=gpu_, periodic=periodic,

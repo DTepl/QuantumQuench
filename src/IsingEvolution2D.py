@@ -26,8 +26,8 @@ class IsingEvol2D:
         self.linear_increase = True
         self.obs = {}
 
-        if inverse:
-            self.ground_state = self.groundState()
+        # if inverse:
+        #     self.ground_state = self.groundState()
 
         if gpu:
             backend.set_options(device='GPU')
@@ -116,7 +116,10 @@ class IsingEvol2D:
         qc = QuantumCircuit(self.N_x * self.N_y)
 
         if self.inverse:
-            qc.set_statevector(self.ground_state)
+            # qc.set_statevector(self.ground_state)
+            if self.h > 0:
+                for idx in range(self.N_x * self.N_y - 1):
+                    qc.x(idx)
         else:
             qc.h(0)
             for idx in range(self.N_x * self.N_y - 1):

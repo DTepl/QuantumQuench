@@ -127,10 +127,10 @@ if __name__ == '__main__':
             N = (i, i)
             dt = (epsdivl * i) ** (1 / 0.36) * 2 / trotter_steps_
             # Add loading condition!
-            quench_runs = iteration_state_evolution_parallel(N, h_, J_, trotter_steps_, dt, gpu=gpu_, periodic=periodic,
-                                               inverse=inverse, bias=bias, dim=2, save=False)
-            # filename = f'2D_states_N{N}_J{J_}_h{h_}_steps{trotter_steps_}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
-            # _, quench_runs, _, _ = load_file("../data/states/" + filename)
+            # quench_runs = iteration_state_evolution_parallel(N, h_, J_, trotter_steps_, dt, gpu=gpu_, periodic=periodic,
+            #                                                  inverse=inverse, bias=bias, dim=2, save=True)
+            filename = f'2D_states_N{N}_J{J_}_h{h_}_steps{trotter_steps_}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
+            _, quench_runs, _, _ = load_file("../data/states/" + filename)
             filename = f"2D_correlators_N{N}_J{J_}_h{h_}_steps{trotter_steps_}_periodic{periodic}_inv{inverse}_bias{bias}"
 
             ## Gives already the right index e.g. 7/2 = 3.5 with integer conversion => 3. Lowest index 0 and highest 6, in the middle
@@ -139,9 +139,17 @@ if __name__ == '__main__':
             obs_idx = {
                 'X': [[i] for i in range(N[0] * N[1])],
                 ## Goes through row of central spin
-                'XX': [[N[0] * y_centr + x_centr, N[0] * y_centr + x] for x in range(N[0]) if x != x_centr] +
-                      ## Goes through column of central spin
-                      [[N[0] * y_centr + x_centr, N[0] * y + x_centr] for y in range(N[1]) if y != y_centr]
+                # 'XX': [[N[0] * y_centr + x_centr, N[0] * y_centr + x] for x in range(N[0]) if x != x_centr] +
+                #       ## Goes through column of central spin
+                #       [[N[0] * y_centr + x_centr, N[0] * y + x_centr] for y in range(N[1]) if y != y_centr] +
+                #       # Diagonals left to right
+                #       [[N[0] * y_centr + x_centr, N[0] * y + y] for y in range(N[1]) if y != y_centr] +
+                #       # Diagonals right to left
+                #       [[N[0] * y_centr + x_centr, (N[0] - 1) * (y + 1)] for y in range(N[1]) if y != y_centr] +
+                #       # Left top corner and right bottom
+                #       [[0, N[0] * N[1] - 1]]
+                ## Distinct pairs between numbers in a certain range
+                'XX': [[i, j] for i in range(N[0] * N[1]) for j in range(i + 1, N[0] * N[1])]
             }
             correlator_measurements(N[0] * N[1], obs_idx, quench_runs, filename)
             tau, correlators, _, _ = load_file("../data/correlators/" + filename)

@@ -144,7 +144,7 @@ class IsingEvol2D:
         log.info(f"Building circuit for {steps} steps")
         sample_step = max(np.floor(steps / samples), 1)
         qc = tc.MPSCircuit(self.N_x * self.N_y)
-        # qc.set_split_rules({"max_singular_values": 64})
+        qc.set_split_rules({"max_singular_values": 100})
         # qc = QuantumCircuit(self.N_x * self.N_y)
         # result = {}
 

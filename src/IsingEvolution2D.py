@@ -5,9 +5,11 @@ from qiskit import QuantumCircuit
 from qiskit.quantum_info.operators import SparsePauliOp
 from qiskit_aer import Aer
 from scipy.sparse.linalg import eigsh
+import tensorcircuit as tc
 
 log.basicConfig(level=log.INFO, filename="output.log")
 backend = Aer.get_backend('aer_simulator_statevector')
+tc.set_backend("tensorflow")
 
 
 class IsingEvol2D:
@@ -25,6 +27,15 @@ class IsingEvol2D:
         self.progress = True
         self.linear_increase = True
         self.obs = {}
+        self.exp_vals = {'XX': {}}
+
+        x_centr = int(N[0] / 2)
+        y_centr = int(N[1] / 2)
+        self.idx = list(set([(N[0] * y_centr + x_centr, N[0] * y_centr + x) for x in range(N[0]) if x != x_centr] + [
+            (N[0] * y_centr + x_centr, N[0] * y + x_centr) for y in range(N[1]) if y != y_centr] + [
+                       (N[0] * y_centr + x_centr, N[0] * y + y) for y in range(N[1]) if y != y_centr] + [
+                       (N[0] * y_centr + x_centr, (N[0] - 1) * (y + 1)) for y in range(N[1]) if y != y_centr] + [
+            (0, N[0] * N[1] - 1)]))
 
         # if inverse:
         #     self.ground_state = self.groundState()
@@ -69,51 +80,73 @@ class IsingEvol2D:
 
     # Second order trotter formula
     def evolution_step(self, qc, step=1, proportion=1.0, sample_step=1, h=None):
-
         # Apply biases in the x-direction (if present)
         if self.bias_parallel:
             for idx in range(self.N_y):
                 for jdx in range(self.N_x):
-                    qc.rx(self.bias_parallel * self.dt * (1 - proportion), idx * self.N_x + jdx)
+                    # qc.rx(self.bias_parallel * self.dt * (1 - proportion), idx * self.N_x + jdx)
+                    qc.rx(idx * self.N_x + jdx, theta=self.bias_parallel * self.dt * (1 - proportion))
 
         # Apply local field in the z-direction
         for idx in range(self.N_y):
             for jdx in range(self.N_x):
-                qc.rz((h or self.h) * self.dt * proportion, idx * self.N_x + jdx)
+                # qc.rz((h or self.h) * self.dt * proportion, idx * self.N_x + jdx)
+                qc.rz(idx * self.N_x + jdx, theta=(h or self.h) * self.dt * proportion)
 
         # Apply nearest-neighbor interactions
         for idx in range(self.N_y):
             for jdx in range(self.N_x - 1):
-                qc.rxx(2 * self.J * self.dt * (1 - proportion), idx * self.N_x + jdx, idx * self.N_x + jdx + 1)
+                # qc.rxx(2 * self.J * self.dt * (1 - proportion), idx * self.N_x + jdx, idx * self.N_x + jdx + 1)
+                qc.rxx(idx * self.N_x + jdx, idx * self.N_x + jdx + 1, theta=2 * self.J * self.dt * (1 - proportion))
 
         # Handle periodic boundary conditions (if applicable)
         if self.periodic:
             for idx in range(self.N_y - 1):
-                qc.rxx(2 * self.J * self.dt * (1 - proportion), (idx + 1) * self.N_x - 1, idx * self.N_x)
+                # qc.rxx(2 * self.J * self.dt * (1 - proportion), (idx + 1) * self.N_x - 1, idx * self.N_x)
+                qc.rxx((idx + 1) * self.N_x - 1, idx * self.N_x, theta=2 * self.J * self.dt * (1 - proportion))
 
         for idx in range(self.N_y - 1):
             for jdx in range(self.N_x):
-                qc.rxx(2 * self.J * self.dt * (1 - proportion), idx * self.N_x + jdx, (idx + 1) * self.N_x + jdx)
+                # qc.rxx(2 * self.J * self.dt * (1 - proportion), idx * self.N_x + jdx, (idx + 1) * self.N_x + jdx)
+                qc.rxx(idx * self.N_x + jdx, (idx + 1) * self.N_x + jdx, theta=2 * self.J * self.dt * (1 - proportion))
 
         # Apply local field in the z-direction again
         for idx in range(self.N_y):
             for jdx in range(self.N_x):
-                qc.rz((h or self.h) * self.dt * proportion, idx * self.N_x + jdx)
+                # qc.rz((h or self.h) * self.dt * proportion, idx * self.N_x + jdx)
+                qc.rz(idx * self.N_x + jdx, theta=(h or self.h) * self.dt * proportion)
 
         # Apply biases in the x-direction again (if present)
         if self.bias_parallel:
             for idx in range(self.N_y):
                 for jdx in range(self.N_x):
-                    qc.rx(self.bias_parallel * self.dt * (1 - proportion), idx * self.N_x + jdx)
+                    # qc.rx(self.bias_parallel * self.dt * (1 - proportion), idx * self.N_x + jdx)
+                    qc.rx(idx * self.N_x + jdx, theta=self.bias_parallel * self.dt * (1 - proportion))
 
         # Optionally, save statevector for sampling
         if step % sample_step == 0:
-            qc.save_statevector(label=str(int(step / sample_step)))
+            # qc.save_statevector(label=str(int(step / sample_step)))
+            # return qc.state()
+            # for i in range(self.N_x * self.N_y):
+            #     # if tuple([i]) not in self.exp_vals['X']:
+            #     #     self.exp_vals['X'][tuple([i])] = []
+            #     # self.exp_vals['X'][tuple([i])].append(np.real(qc.expectation_ps(x=[i]).numpy()))
+            #
+            #     for j in range(i + 1, self.N_x * self.N_y):
+            for [i, j] in self.idx:
+                if tuple([i, j]) not in self.exp_vals['XX']:
+                    self.exp_vals['XX'][tuple([i, j])] = np.array([])
+                self.exp_vals['XX'][tuple([i, j])] = np.append(self.exp_vals['XX'][tuple([i, j])],
+                                                               (np.real(qc.expectation_ps(x=[i, j]).numpy())))
+        # return None
 
     def circuit(self, steps: int, samples=1, h=None):
         log.info(f"Building circuit for {steps} steps")
         sample_step = max(np.floor(steps / samples), 1)
-        qc = QuantumCircuit(self.N_x * self.N_y)
+        qc = tc.MPSCircuit(self.N_x * self.N_y)
+        # qc.set_split_rules({"max_singular_values": 64})
+        # qc = QuantumCircuit(self.N_x * self.N_y)
+        # result = {}
 
         if self.inverse:
             # qc.set_statevector(self.ground_state)
@@ -129,17 +162,24 @@ class IsingEvol2D:
                 qc.h(idx)
 
         for step in tqdm.tqdm(range(1, steps + 1), disable=not self.progress):
+            # state = self.evolution_step(qc, step=step, proportion=(
+            #     (1 - step / steps if self.inverse else step / steps) if self.linear_increase else 1),
+            #                             sample_step=sample_step, h=h)
             self.evolution_step(qc, step=step, proportion=(
                 (1 - step / steps if self.inverse else step / steps) if self.linear_increase else 1),
                                 sample_step=sample_step, h=h)
+            # if state is not None:
+            #     result[str(int(step / sample_step))] = state
         return qc
 
     def execute(self, steps: int = 1, draw: bool = False, samples: int = 1, h: float = None):
         qc = self.circuit(steps, samples=samples, h=h)
-        if draw:
-            print(qc)
+        # c = tc.Circuit.from_qiskit(qc, self.N_x * self.N_y)
 
-        job = backend.run(qc)
-        res = job.result()
-        log.info(f"Time taken for execution: {res.time_taken}")
-        return res.data(0)
+        # if draw:
+        #     print(qc)
+        #
+        # job = backend.run(qc)
+        # res = job.result()
+        # log.info(f"Time taken for execution: {res.time_taken}")
+        return self.exp_vals

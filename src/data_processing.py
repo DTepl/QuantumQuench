@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def pair_to_distance(N: tuple[int, int], pair_dict: dict, periodic=False, dim=1):
+def pair_to_distance(N: tuple[int, int], pair_dict: dict, periodic=False):
     distance_dict = {}
     if isinstance(N, int):
         N = (N, 0)

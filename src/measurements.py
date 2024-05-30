@@ -51,7 +51,7 @@ def iteration_state_evolution_parallel(N, h, J, steps, dt, gpu=False, periodic=F
     params = zip(repeat(N), repeat(h), repeat(J), dt, repeat(steps), repeat(steps), repeat(periodic),
                  repeat(inverse), repeat(bias), repeat(gpu), repeat(dim))
     with Pool() as pool:
-        states = np.array(pool.starmap(iteration_state_evolution, params))
+        states = np.array(pool.starmap(iteration_state_evolution if dim == 1 else iteration_exp_vals_2D, params))
 
     result = {}
     for count, quench in enumerate(states):
@@ -64,6 +64,32 @@ def iteration_state_evolution_parallel(N, h, J, steps, dt, gpu=False, periodic=F
 
     return result
 
+
+def iteration_exp_vals_2D(N, h, J, dt, steps, samples, periodic, inverse, bias, gpu, dim=2):
+    ising_model_evolution = IsingEvol2D(N, dt, h, J, gpu=gpu, periodic=periodic, inverse=inverse, bias=bias)
+    ising_model_evolution.progress = True
+    return ising_model_evolution.execute(draw=False, steps=steps, samples=samples)
+
+
+# def iteration_exp_vals_2D_parallel(N, h, J, steps, dt, gpu=False, periodic=False, inverse=False, bias=None,
+#                                    save=True):
+#     params = zip(repeat(N), repeat(h), repeat(J), dt, repeat(steps), repeat(steps), repeat(periodic),
+#                  repeat(inverse), repeat(bias), repeat(gpu))
+#     with Pool() as pool:
+#         exp_vals = np.array(pool.starmap(iteration_exp_vals_2D, params))
+#     # exp_vals = np.array(list(map(iteration_exp_vals_2D, repeat(N), repeat(h), repeat(J), dt, repeat(steps), repeat(steps), repeat(periodic),
+#     #              repeat(inverse), repeat(bias), repeat(gpu))))
+#
+#     result = {}
+#     for count, quench in enumerate(exp_vals):
+#         result[str(dt[count] * steps)] = quench
+#
+#     if save:
+#         filename = f'states/2D_states_N{N}_J{J}_h{h}_steps{steps}_dt{dt}_periodic{periodic}_inv{inverse}_bias{bias}'
+#         things_to_save = [dt, result, None, None]
+#         save_file(filename, things_to_save)
+#
+#     return result
 
 def iteration_entropy(partial_trace_set: list[np.ndarray]):
     res = []

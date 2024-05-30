@@ -177,15 +177,23 @@ def plot_correlators_distance_2D(correlators, moments, filename, critical=False)
                 distances_XX = []
                 y_XX = []
 
+                distance_corner = []
+                y_corner = []
+
                 if not epsilon_h in colormap:
                     colormap[epsilon_h] = color[0]
                     legend_elements.append(Line2D([0], [0], color=color[0], label=f'$\\epsilon/L$: {epsilon_h}'))
                     color.remove(color[0])
 
                 for distance in correlators[(L, _L)][tau]['XX']:
-                    distances_XX.append(distance[0])
                     data_XX = np.array(correlators[(L, _L)][tau]['XX'][distance])
-                    y_XX.append(np.mean(data_XX[:, int(percentage * data_XX.shape[1])]))
+
+                    if np.sqrt((L - 1) ** 2 + (_L - 1) ** 2) == distance[0]:
+                        distance_corner.append(distance[0])
+                        y_corner.append(np.mean(data_XX[:, int(percentage * data_XX.shape[1])]))
+                    else:
+                        distances_XX.append(distance[0])
+                        y_XX.append(np.mean(data_XX[:, int(percentage * data_XX.shape[1])]))
 
                 ax_distance[0].scatter(distances_XX, y_XX,
                                        # label=f"$t/t_h$={round(moment, 2)}",
@@ -193,6 +201,13 @@ def plot_correlators_distance_2D(correlators, moments, filename, critical=False)
                 ax_distance[1].scatter(np.array(distances_XX) / epsilon, np.array(y_XX) * epsilon ** twoDelta,
                                        # label=f"$t/t_h$={round(moment, 2)}",
                                        marker=markers[count_corr], color=colormap[epsilon_h])
+
+                ax_distance[0].scatter(distance_corner, y_corner,
+                                       # label=f"$t/t_h$={round(moment, 2)}",
+                                       marker=markers[count_corr], color=colormap[epsilon_h], edgecolors='black')
+                ax_distance[1].scatter(np.array(distance_corner) / epsilon, np.array(y_corner) * epsilon ** twoDelta,
+                                       # label=f"$t/t_h$={round(moment, 2)}",
+                                       marker=markers[count_corr], color=colormap[epsilon_h], edgecolors='black')
 
     ax_distance[0].set_ylabel('$C_{XX}(R)$')
     ax_distance[0].grid()
